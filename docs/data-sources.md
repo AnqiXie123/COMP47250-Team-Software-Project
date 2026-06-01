@@ -173,8 +173,7 @@ Author: Yifei Wang
 and Fuel Type (National)
 - PxStat URL: https://data.cso.ie/table/TEM12
 - Format: Interactive table with CSV/JSON download + REST API
-- API endpoint: https://ws.cso.ie/public/api.restful/
-  PxStat.Data.Cube_API.ReadDataset/TEM12/CSV/1.0/en
+- API endpoint: https://ws.cso.ie/public/api.restful/PxStat.Data.Cube_API.ReadDataset/TEM12/CSV/1.0/en
 - Accessible: Y (no registration required)
 - Last updated: 12/05/2026
 - Coverage: Republic of Ireland, national level
@@ -197,8 +196,7 @@ Fuel Type and Year (National)
 - Status: ✅ Confirmed usable — annual EV totals by fuel type
 
 ### Dataset 3: Sustainable Mobility and Transport 2021 (Reference)
-- URL: https://www.cso.ie/en/releasesandpublications/ep/p-smt/
-  sustainablemobilityandtransport2021/electricvehicles/
+- URL: https://www.cso.ie/en/releasesandpublications/ep/p-smt/sustainablemobilityandtransport2021/electricvehicles/
 - Format: Statistical report with Excel tables
 - Key finding: EV ownership in Dublin (4.9%) is approximately
   twice the national average outside Dublin (2.5%), providing
