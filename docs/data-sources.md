@@ -32,6 +32,28 @@ Author: Yifei Wang
 - Status: ⚠️ Usable with limitations — no lat/lon coordinates;
   geocoding required before spatial analysis
 
+#### Dataset 3: ESB EV Public Charging Network — Ireland
+- Dataset URL: https://data.gov.ie/en_GB/dataset/esb-ev-public-charging-network
+- Direct download: https://cdn.esb.ie/media-staging/docs/default-source/ecars/
+  its-data-ecars-sites/its-data-ecars-sites-roi-ni.csv
+- Source organisation: ESB (Electricity Supply Board), published via data.gov.ie
+- Format: CSV
+- Accessible: Y (direct download, no registration required)
+- Last updated: 2024-12-02 (quarterly update frequency)
+- Record count: 591 total (island of Ireland); 88 Dublin county records
+- Key fields: Territory, County, Address, Nr. Chargers, Latitude,
+  Longitude, Open Hours, connector types (CCS/CHAdeMO/AC), power output (kW)
+- Coverage: Full Dublin administrative area including city centre (DCC),
+  Fingal (FCC), South Dublin (SDCC), and Dún Laoghaire-Rathdown (DLR)
+- Status: ✅ Confirmed usable — resolves previously identified FCC and
+  DCC coverage gaps; all 88 Dublin records have complete coordinates
+
+#### Note on Combined EV Charger Coverage
+With ESB eCars (88 records), DLR GeoJSON (~30 records), and SDCC CSV
+(33 records), total Dublin EV charger coverage is approximately 150
+records across all four county council areas. ESB eCars will serve as
+the primary dataset; DLR and SDCC provide supplementary detail.
+
 #### Datasets Investigated but Rejected
 - EVPZ Stations FCC (Fingal County Council):
   only 2 records, insufficient coverage — rejected
