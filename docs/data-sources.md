@@ -34,8 +34,7 @@ Author: Yifei Wang
 
 #### Dataset 3: ESB EV Public Charging Network — Ireland
 - Dataset URL: https://data.gov.ie/en_GB/dataset/esb-ev-public-charging-network
-- Direct download: https://cdn.esb.ie/media-staging/docs/default-source/ecars/
-  its-data-ecars-sites/its-data-ecars-sites-roi-ni.csv
+- Direct download: https://cdn.esb.ie/media-staging/docs/default-source/ecars/its-data-ecars-sites/its-data-ecars-sites-roi-ni.csv
 - Source organisation: ESB (Electricity Supply Board), published via data.gov.ie
 - Format: CSV
 - Accessible: Y (direct download, no registration required)
