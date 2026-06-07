@@ -6,7 +6,7 @@ Sprint target: Sprint 2 (MVP by 22 Jun)
 
 The backend provides a FastAPI REST service that serves EV charger and renewable energy data to the React + Leaflet frontend. It connects to a local PostgreSQL + PostGIS database populated by one-off ingestion scripts.
 
-TimescaleDB is deferred to Docker deployment (Sprint 4). For local development, the `create_hypertable` calls in `schema.sql` are skipped.
+TimescaleDB is deferred to Docker deployment (Sprint 4). This is an explicit fallback documented in the project risk register (Preliminary Project Plan, Section 9): "Fall back to PostgreSQL + PostGIS if TimescaleDB blocks Sprint 2." TimescaleDB is a performance optimisation only — it adds no functionality that affects correctness for Sprint 2.
 
 ---
 
@@ -32,17 +32,13 @@ backend/
 ## Database
 
 - **Engine:** PostgreSQL 17 (local) with PostGIS extension
-- **Schema:** defined in `data-pipeline/schema.sql`
+- **Schema:** two files:
+  - `backend/schema_local.sql` — for local development (no TimescaleDB)
+  - `data-pipeline/schema.sql` — for Docker deployment (with TimescaleDB)
 - **Local setup:**
   1. `brew install postgresql@17 postgis`
-  2. Create database: `createdb ecocharge`
-  3. Apply schema with TimescaleDB lines commented out:
-     ```bash
-     psql -U postgres -d ecocharge -f data-pipeline/schema.sql
-     ```
-  Lines to comment out for local dev (no TimescaleDB):
-  - `CREATE EXTENSION IF NOT EXISTS timescaledb;`
-  - Both `SELECT create_hypertable(...)` blocks
+  2. `createdb ecocharge`
+  3. `psql -d ecocharge -f backend/schema_local.sql`
 
 ---
 
