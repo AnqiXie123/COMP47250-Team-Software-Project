@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/COMP47250-Team-Software-Projec/static/css/main.323d7611.css",
+    "main.js": "/COMP47250-Team-Software-Projec/static/js/main.d02ba072.js",
+    "static/js/453.5b66b54b.chunk.js": "/COMP47250-Team-Software-Projec/static/js/453.5b66b54b.chunk.js",
+    "index.html": "/COMP47250-Team-Software-Projec/index.html",
+    "main.323d7611.css.map": "/COMP47250-Team-Software-Projec/static/css/main.323d7611.css.map",
+    "main.d02ba072.js.map": "/COMP47250-Team-Software-Projec/static/js/main.d02ba072.js.map",
+    "453.5b66b54b.chunk.js.map": "/COMP47250-Team-Software-Projec/static/js/453.5b66b54b.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.323d7611.css",
+    "static/js/main.d02ba072.js"
+  ]
+}
