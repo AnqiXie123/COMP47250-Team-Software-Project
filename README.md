@@ -5,7 +5,7 @@ An interactive urban planning and decision-support system designed to optimize E
 ##  Frontend Deployment (Sprint 1 MVP)
 
 The interactive map application has been successfully deployed and is live for testing:
-**[Click Here to Open Live Dashboard](https://AnqiXie123/COMP47250-Team-Software-Projec/blob/frontend/index.html)**
+**[Click Here to Open Live Dashboard](http://localhost:3000/)**
 
 ---
 
