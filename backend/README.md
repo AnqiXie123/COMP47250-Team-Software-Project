@@ -1,149 +1,95 @@
-# EcoCharge Dublin — 后端启动与配置指南
+# EcoCharge Dublin — Backend API
 
-## 环境要求
-
-- macOS（Apple Silicon 或 Intel）
-- Python 3.14（已通过 Homebrew 安装）
-- PostgreSQL 17 + PostGIS（通过 Homebrew 安装）
+Base URL: `http://127.0.0.1:8000`
+Swagger docs: `http://127.0.0.1:8000/docs`
 
 ---
 
-## 第一次配置（只需做一次）
+## 快速启动
 
-### 1. 安装数据库
+### 第 0 步：创建 `.env` 文件
 
-```bash
-brew install postgresql@17
-brew install postgis
+在项目根目录 `COMP47250-Team-Software-Projec/` 下新建 `.env` 文件，复制以下内容：
+
+```
+DATABASE_URL=postgresql://postgres.surezityslscwrkgvnws:Cq3ygcvMP9%25fSWF@aws-0-eu-west-1.pooler.supabase.com:5432/postgres
 ```
 
-将 PostgreSQL 加入 PATH（如果还没加）：
-
-```bash
-echo 'export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-### 2. 启动 PostgreSQL 服务
-
-```bash
-brew services start postgresql@17
-```
-
-验证是否正常运行：
-
-```bash
-psql -l
-```
-
-能看到数据库列表说明成功。
-
-### 3. 建库并初始化表结构
-
-```bash
-createdb ecocharge
-psql -d ecocharge -f backend/schema_local.sql
-```
-
-> 说明：`schema_local.sql` 是本地开发用的精简版 schema，去掉了 TimescaleDB（Docker 部署时才需要）。
-> 这是项目风险清单中的 Sprint 2 fallback 方案，Sprint 4 再统一用 Docker 加上 TimescaleDB。
-
-### 4. 创建 Python 虚拟环境并安装依赖
-
-在项目根目录（`COMP47250-Team-Software-Projec/`）下执行：
+### 第 1 步：安装依赖
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r backend/requirements.txt
 ```
 
-### 5. 导入初始数据
-
-先导入充电站数据：
-
-```bash
-.venv/bin/python -m backend.ingest.load_chargers
-```
-
-输出：`Loaded 134 EV charger records into ev_chargers.`
-
-再导入 EirGrid 能源数据：
-
-```bash
-.venv/bin/python -m backend.ingest.load_energy
-```
-
-输出：`Loaded 11516 energy records into renewable_energy.`
-
-> 两个脚本都可以重复执行，不会产生重复数据。
-
----
-
-## 日常启动
-
-### 启动 PostgreSQL（如果没有设置开机自启）
-
-```bash
-brew services start postgresql@17
-```
-
-### 启动 API 服务器
-
-在项目根目录（`COMP47250-Team-Software-Projec/`）下执行：
+### 第 2 步：启动 API
 
 ```bash
 .venv/bin/uvicorn backend.main:app --reload
 ```
 
-服务器默认运行在 `http://127.0.0.1:8000`，`--reload` 参数让代码修改后自动重启。
+看到以下输出说明成功：
 
-### 停止服务器
+```
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Application startup complete.
+```
 
-在运行服务器的终端按 `Ctrl + C`。
+浏览器打开 `http://127.0.0.1:8000/docs` 可以直接测试所有接口。
+
+**停止服务器：** 终端按 `Ctrl + C`
 
 ---
 
-## 接口说明
+## 接口
 
-| 接口 | 说明 |
-|---|---|
-| `GET /api/chargers` | 返回全部 134 个 Dublin 公共充电站（id、坐标、运营商等） |
-| `GET /api/energy/latest` | 返回最新一条 EirGrid 可再生能源数据（风电、光伏、可再生评分） |
+### GET `/api/chargers`
 
-### 示例请求
+返回全部 Dublin 公共 EV 充电站，GeoJSON FeatureCollection 格式。
 
 ```bash
 curl http://127.0.0.1:8000/api/chargers
+```
+
+```json
+{
+  "type": "FeatureCollection",
+  "count": 134,
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-6.182852, 53.611523] },
+      "properties": {
+        "id": "esb_0",
+        "address": "Irish Rail, Railway Street, Balbriggan",
+        "operator": "ESB eCars",
+        "num_chargers": 1,
+        "source_area": "ESB_national",
+        "open_hours": "24 x 7"
+      }
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/energy/latest`
+
+返回最新一条可再生能源数据。
+
+```bash
 curl http://127.0.0.1:8000/api/energy/latest
 ```
 
-### Swagger 交互文档
-
-浏览器打开：`http://127.0.0.1:8000/docs`
-
----
-
-## 运行测试
-
-```bash
-.venv/bin/pytest backend/tests/ -v
-```
-
-当前共 6 个测试，全部应通过。测试使用 mock 数据库，不需要连接真实 PostgreSQL。
-
----
-
-## 环境变量
-
-| 变量 | 默认值 | 说明 |
-|---|---|---|
-| `DATABASE_URL` | `postgresql+asyncpg://localhost/ecocharge` | 数据库连接地址，本地不需要改 |
-
-如需修改数据库地址：
-
-```bash
-export DATABASE_URL="postgresql+asyncpg://用户名:密码@地址/ecocharge"
-.venv/bin/uvicorn backend.main:app --reload
+```json
+{
+  "datetime": "2026-04-30T23:45:00+00:00",
+  "wind_mw": 607.09,
+  "solar_mw": 2.16,
+  "total_demand_mw": 3645.06,
+  "renewable_score": 0.1671
+}
 ```
 
 ---
@@ -152,18 +98,13 @@ export DATABASE_URL="postgresql+asyncpg://用户名:密码@地址/ecocharge"
 
 ```
 backend/
-├── README.md              # 本文档
-├── schema_local.sql       # 本地建表 SQL（无 TimescaleDB）
-├── requirements.txt       # Python 依赖
-├── database.py            # 数据库连接配置
-├── main.py                # FastAPI 入口
+├── main.py            # FastAPI 入口
+├── database.py        # 数据库连接（Supabase）
 ├── routers/
-│   ├── chargers.py        # GET /api/chargers
-│   └── energy.py          # GET /api/energy/latest
+│   ├── chargers.py    # GET /api/chargers
+│   └── energy.py      # GET /api/energy/latest
 ├── ingest/
-│   ├── load_chargers.py   # 导入充电站数据（一次性）
-│   └── load_energy.py     # 导入能源数据（一次性）
+│   ├── load_chargers.py
+│   └── load_energy.py
 └── tests/
-    ├── test_chargers.py   # 充电站接口测试
-    └── test_energy.py     # 能源接口测试
 ```

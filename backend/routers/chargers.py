@@ -13,4 +13,12 @@ async def get_chargers(db: AsyncSession = Depends(get_db)):
         "FROM ev_chargers"
     ))
     rows = result.mappings().all()
-    return [dict(row) for row in rows]
+    features = [
+        {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [row["lon"], row["lat"]]},
+            "properties": {k: v for k, v in row.items() if k not in ("lat", "lon")},
+        }
+        for row in rows
+    ]
+    return {"type": "FeatureCollection", "count": len(features), "features": features}

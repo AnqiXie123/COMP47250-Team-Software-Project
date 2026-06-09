@@ -4,11 +4,15 @@ Run from the repo root: python -m backend.ingest.load_chargers
 Safe to re-run — uses ON CONFLICT DO NOTHING.
 """
 import json
+import os
 import psycopg2
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 GEOJSON_PATH = Path("data-pipeline/output/dublin_ev_chargers.geojson")
-DB_DSN = "dbname=ecocharge"
+DB_DSN = os.getenv("DATABASE_URL", "dbname=ecocharge")
 
 INSERT_SQL = """
     INSERT INTO ev_chargers (id, lat, lon, address, operator, num_chargers, source_area, open_hours, geom)
