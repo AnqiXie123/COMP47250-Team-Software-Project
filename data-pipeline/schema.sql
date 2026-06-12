@@ -176,30 +176,23 @@ CREATE INDEX IF NOT EXISTS idx_traffic_volumes_geom
 -- by priority score derived from supply-demand gap analysis.
 
 CREATE TABLE IF NOT EXISTS recommended_locations (
-    id              SERIAL          PRIMARY KEY,
-                    -- Auto-incrementing unique identifier
-
-    lat             DOUBLE PRECISION NOT NULL,
-                    -- Latitude of recommended location (WGS84)
-
-    lon             DOUBLE PRECISION NOT NULL,
-                    -- Longitude of recommended location (WGS84)
-
-    cluster_id      INTEGER,
-                    -- K-Means cluster this location belongs to
-
-    priority_score  DOUBLE PRECISION,
-                    -- Ranking score derived from supply-demand gap;
-                    -- higher score = higher priority for new charger
-
-    rank            INTEGER,
-                    -- Overall rank among all recommended locations
-                    -- (1 = highest priority)
-
-    geom            GEOMETRY(Point, 4326)
-                    -- PostGIS geometry — populated from lat/lon during ingestion
+    id                  SERIAL          PRIMARY KEY,
+    lat                 DOUBLE PRECISION NOT NULL,
+    lon                 DOUBLE PRECISION NOT NULL,
+    cluster_id          INTEGER,
+    avg_gap_score       DOUBLE PRECISION,
+                        -- Mean supply-demand gap score for this cluster;
+                        -- higher = higher priority for new charger
+    avg_traffic         DOUBLE PRECISION,
+                        -- Mean hourly traffic volume in this cluster
+    avg_chargers        DOUBLE PRECISION,
+                        -- Mean existing charger count nearby in this cluster
+    site_count          INTEGER,
+                        -- Number of SCATS sites in this cluster
+    rank                INTEGER,
+                        -- Priority rank (1 = highest priority)
+    geom                GEOMETRY(Point, 4326)
 );
 
--- Spatial index for map display queries
 CREATE INDEX IF NOT EXISTS idx_recommended_locations_geom
     ON recommended_locations USING GIST (geom);
