@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.routers import chargers, energy
+from backend.routers import chargers, energy, recommendations
 
 app = FastAPI(title="EcoCharge Dublin API")
 
@@ -13,3 +13,4 @@ app.add_middleware(
 
 app.include_router(chargers.router)
 app.include_router(energy.router)
+app.include_router(recommendations.router)
