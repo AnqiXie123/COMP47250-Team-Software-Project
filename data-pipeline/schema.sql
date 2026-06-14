@@ -165,3 +165,34 @@ CREATE INDEX IF NOT EXISTS idx_traffic_volumes_site_time
 -- Spatial index for proximity queries
 CREATE INDEX IF NOT EXISTS idx_traffic_volumes_geom
     ON traffic_volumes USING GIST (geom);
+
+-- =============================================================================
+-- TABLE: recommended_locations
+-- Source: ML pipeline (K-Means clustering)
+-- Script: ml-engine/kmeans_clustering.py (ML)
+-- =============================================================================
+-- Stores AI-recommended new EV charging station locations produced by the
+-- K-Means clustering algorithm. Each row is one recommended site, ranked
+-- by priority score derived from supply-demand gap analysis.
+
+CREATE TABLE IF NOT EXISTS recommended_locations (
+    id                  SERIAL          PRIMARY KEY,
+    lat                 DOUBLE PRECISION NOT NULL,
+    lon                 DOUBLE PRECISION NOT NULL,
+    cluster_id          INTEGER,
+    avg_gap_score       DOUBLE PRECISION,
+                        -- Mean supply-demand gap score for this cluster;
+                        -- higher = higher priority for new charger
+    avg_traffic         DOUBLE PRECISION,
+                        -- Mean hourly traffic volume in this cluster
+    avg_chargers        DOUBLE PRECISION,
+                        -- Mean existing charger count nearby in this cluster
+    site_count          INTEGER,
+                        -- Number of SCATS sites in this cluster
+    rank                INTEGER,
+                        -- Priority rank (1 = highest priority)
+    geom                GEOMETRY(Point, 4326)
+);
+
+CREATE INDEX IF NOT EXISTS idx_recommended_locations_geom
+    ON recommended_locations USING GIST (geom);

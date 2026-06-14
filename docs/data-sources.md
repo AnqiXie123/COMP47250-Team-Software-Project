@@ -88,6 +88,15 @@ the primary dataset; DLR and SDCC provide supplementary detail.
   file to obtain coordinates
 - Status: ✅ Primary traffic data source for DLR area
 
+#### Supplementary: SCATS Site Location Data — DLR
+- Dataset URL: https://data.smartdublin.ie/dataset/traffic-signals-and-scats-sites-locations-dlr
+- Format: CSV
+- Accessible: Y (direct download)
+- Record count: 290 sites
+- Key fields: Site_ID, Location, Lat, Long
+- Usage: joined with SCATS volume data to add coordinates
+- Status: ✅ Downloaded and used in 03_clean_traffic_data.py
+
 #### Dataset 2: Traffic Volumes from SCATS — DCC 2025
 - Dataset URL (Jan–Jun): https://data.smartdublin.ie/dataset/dcc-scats-detector-volume-jan-jun-2025
 - Dataset URL (Jul–Dec): https://data.smartdublin.ie/dataset/dcc-scats-detector-volume-jul-dec-2025
