@@ -18,10 +18,15 @@ def _make_ssl_context():
     ctx.verify_mode = _ssl.CERT_NONE
     return ctx
 
+_is_supabase = "supabase.com" in DATABASE_URL or "supabase.co" in DATABASE_URL
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    connect_args={"ssl": _make_ssl_context()} if "supabase.com" in DATABASE_URL or "supabase.co" in DATABASE_URL else {},
+    connect_args={
+        "ssl": _make_ssl_context(),
+        "statement_cache_size": 0,
+    } if _is_supabase else {},
 )
 
 AsyncSessionLocal = sessionmaker(
