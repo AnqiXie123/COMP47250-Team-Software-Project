@@ -43,13 +43,28 @@ INFO:     Application startup complete.
 
 ## 接口
 
+所有接口均返回 JSON，无需鉴权。
+
+---
+
 ### GET `/api/chargers`
 
-返回全部 Dublin 公共 EV 充电站，GeoJSON FeatureCollection 格式。
+返回 Dublin 全部 134 个公共 EV 充电站，GeoJSON FeatureCollection 格式。
 
 ```bash
 curl http://127.0.0.1:8000/api/chargers
 ```
+
+**返回字段：**
+
+| 字段 | 说明 |
+|---|---|
+| `id` | 充电站唯一 ID（如 `esb_0`、`dlr_3`） |
+| `address` | 地址 |
+| `operator` | 运营商（ESB eCars / EasyGo 等） |
+| `num_chargers` | 充电桩数量 |
+| `source_area` | 数据来源（ESB_national / DLR / SDCC） |
+| `open_hours` | 开放时间 |
 
 ```json
 {
@@ -76,11 +91,21 @@ curl http://127.0.0.1:8000/api/chargers
 
 ### GET `/api/energy/latest`
 
-返回最新一条可再生能源数据。
+返回最新一条 EirGrid 可再生能源数据（15 分钟间隔）。
 
 ```bash
 curl http://127.0.0.1:8000/api/energy/latest
 ```
+
+**返回字段：**
+
+| 字段 | 说明 |
+|---|---|
+| `datetime` | 时间戳（UTC） |
+| `wind_mw` | 风力发电量（MW） |
+| `solar_mw` | 太阳能发电量（MW） |
+| `total_demand_mw` | 全国总用电需求（MW） |
+| `renewable_score` | 可再生能源占比（0~1，越高越绿色） |
 
 ```json
 {
@@ -94,17 +119,61 @@ curl http://127.0.0.1:8000/api/energy/latest
 
 ---
 
+### GET `/api/recommendations`
+
+返回 K-Means 算法推荐的 10 个新 EV 充电站位置，按优先级排序（rank 1 最优先），GeoJSON FeatureCollection 格式。
+
+```bash
+curl http://127.0.0.1:8000/api/recommendations
+```
+
+**返回字段：**
+
+| 字段 | 说明 |
+|---|---|
+| `rank` | 优先级排名（1 = 最需要建站） |
+| `cluster_id` | K-Means 聚类编号 |
+| `gap_score` | 供需缺口评分（越高越缺充电桩） |
+| `traffic_volume` | 该区域平均交通流量 |
+| `charger_count_nearby` | 附近现有充电桩数量 |
+| `renewable_score` | 可再生能源评分 |
+
+```json
+{
+  "type": "FeatureCollection",
+  "count": 10,
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-6.1501, 53.2766] },
+      "properties": {
+        "rank": 1,
+        "cluster_id": 5,
+        "gap_score": 2120.1,
+        "traffic_volume": 2120.1,
+        "charger_count_nearby": 0.0,
+        "renewable_score": 0.4102
+      }
+    }
+  ]
+}
+```
+
+---
+
 ## 目录结构
 
 ```
 backend/
-├── main.py            # FastAPI 入口
-├── database.py        # 数据库连接（Supabase）
+├── main.py                    # FastAPI 入口
+├── database.py                # 数据库连接（Supabase）
 ├── routers/
-│   ├── chargers.py    # GET /api/chargers
-│   └── energy.py      # GET /api/energy/latest
+│   ├── chargers.py            # GET /api/chargers
+│   ├── energy.py              # GET /api/energy/latest
+│   └── recommendations.py    # GET /api/recommendations
 ├── ingest/
-│   ├── load_chargers.py
-│   └── load_energy.py
+│   ├── load_chargers.py       # 导入充电站数据
+│   ├── load_energy.py         # 导入能源数据
+│   └── load_recommendations.py# 导入 K-Means 推荐结果
 └── tests/
 ```
