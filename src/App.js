@@ -51,6 +51,7 @@ const renderPopupContent = (charger) => {
 function App() {
   const [chargers, setChargers] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
+  const [trafficData, setTrafficData] = useState([]);
 
   useEffect(() => {
     fetch('http://127.0.0.1:8000/api/chargers')
@@ -81,14 +82,28 @@ function App() {
         setRecommendations(points);
       })
       .catch(err => console.error('Recommendations fetch failed:', err));
+
+    fetch('http://127.0.0.1:8000/api/traffic')
+      .then(res => res.json())
+      .then(data => {
+        setTrafficData(data);
+      })
+      .catch(err => console.error('Traffic fetch failed:', err));
   }, []);
 
   const CLEANED_CHARGERS = getUniqueChargers(chargers);
-  const heatmapPoints = CLEANED_CHARGERS.map(c => ({
-    lat: c.lat,
-    lon: c.lon,
-    intensity: c.num_chargers / 5
-  }));
+  const heatmapPoints = trafficData.length > 0
+    ? trafficData.map(t => ({
+        lat: t.lat,
+        lon: t.lon,
+        intensity: t.volume / 3000
+      }))
+    : CLEANED_CHARGERS.map(c => ({
+        lat: c.lat,
+        lon: c.lon,
+        intensity: c.num_chargers / 5
+      }));
+
   const esbChargers = CLEANED_CHARGERS.filter(c => c.operator.toUpperCase().includes('ESB'));
   const easyGoChargers = CLEANED_CHARGERS.filter(c => c.operator.toUpperCase().includes('EASYGO'));
   const otherChargers = CLEANED_CHARGERS.filter(c =>
@@ -121,6 +136,10 @@ function App() {
           <div>
             <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#95a5a6', textTransform: 'uppercase' }}>Recommended Sites</p>
             <p style={{ margin: 0, fontSize: '28px', fontWeight: 'bold', color: '#e74c3c' }}>{recommendations.length}</p>
+          </div>
+          <div>
+            <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#95a5a6', textTransform: 'uppercase' }}>Traffic Sites</p>
+            <p style={{ margin: 0, fontSize: '28px', fontWeight: 'bold', color: '#3498db' }}>{trafficData.length}</p>
           </div>
           <hr style={{ border: '0', borderTop: '1px solid #2c3e50', margin: '4px 0' }} />
           <div>
