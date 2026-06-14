@@ -161,6 +161,35 @@ curl http://127.0.0.1:8000/api/recommendations
 
 ---
 
+### GET `/api/traffic`
+
+返回 223 个 Dublin SCATS 交通监测站点的交通流量数据，按流量从高到低排序。
+
+```bash
+curl http://127.0.0.1:8000/api/traffic
+```
+
+**返回字段：**
+
+| 字段 | 说明 |
+|---|---|
+| `lat` | 纬度 |
+| `lon` | 经度 |
+| `volume` | 年均小时交通流量（辆/小时） |
+
+```json
+[
+  { "lat": 53.344, "lon": -6.267, "volume": 1234.5 },
+  { "lat": 53.351, "lon": -6.258, "volume": 1100.2 }
+]
+```
+
+**测试方式：**
+- 浏览器访问：`http://127.0.0.1:8000/api/traffic`
+- Swagger UI：`http://127.0.0.1:8000/docs` → 找到 `/api/traffic` → 点击 Try it out → Execute
+
+---
+
 ## 目录结构
 
 ```
@@ -170,10 +199,12 @@ backend/
 ├── routers/
 │   ├── chargers.py            # GET /api/chargers
 │   ├── energy.py              # GET /api/energy/latest
-│   └── recommendations.py    # GET /api/recommendations
+│   ├── recommendations.py     # GET /api/recommendations
+│   └── traffic.py             # GET /api/traffic
 ├── ingest/
 │   ├── load_chargers.py       # 导入充电站数据
 │   ├── load_energy.py         # 导入能源数据
-│   └── load_recommendations.py# 导入 K-Means 推荐结果
+│   ├── load_recommendations.py# 导入 K-Means 推荐结果
+│   └── load_traffic.py        # 导入 SCATS 交通流量数据
 └── tests/
 ```

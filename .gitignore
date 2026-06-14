@@ -9,8 +9,7 @@ data-pipeline/output/
 .venv/
 
 # Internal docs (not for repo)
-docs/superpowers/
-docs/internal/
+docs/
 
 # macOS
 .DS_Store
