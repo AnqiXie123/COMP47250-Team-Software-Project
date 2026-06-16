@@ -58,7 +58,7 @@ async def get_energy_timeseries(
         time_filter = ""
         params = {}
     else:
-        time_filter = "WHERE datetime >= NOW() - (INTERVAL '1 day' * :days)"
+        time_filter = "WHERE datetime >= (SELECT MAX(datetime) FROM renewable_energy) - (INTERVAL '1 day' * :days)"
         params = {"days": days_val}
 
     if interval == "15m":
