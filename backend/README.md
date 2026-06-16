@@ -119,6 +119,55 @@ curl http://127.0.0.1:8000/api/energy/latest
 
 ---
 
+### GET `/api/energy/timeseries`
+
+返回时序能源数据，供前端画折线图。支持按时间范围和粒度过滤。
+
+**查询参数：**
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `days` | 正整数 或 `all` | `7` | 返回最近 N 天数据；`all` 返回全部 |
+| `interval` | `15m` / `1h` / `1d` | `15m` | 数据粒度（15分钟 / 按小时聚合 / 按天聚合） |
+
+**组合限制：**
+
+| `days` | 允许的 `interval` |
+|--------|-----------------|
+| ≤ 7 | `15m`, `1h`, `1d` |
+| 8 ~ 90 | `1h`, `1d` |
+| > 90 或 `all` | `1d` |
+
+违规组合返回 `400 Bad Request`。
+
+```bash
+curl "http://127.0.0.1:8000/api/energy/timeseries?days=7&interval=1h"
+```
+
+**返回字段：**
+
+| 字段 | 说明 |
+|------|------|
+| `datetime` | 时间戳（UTC） |
+| `wind_mw` | 风力发电量（MW） |
+| `solar_mw` | 太阳能发电量（MW） |
+| `total_demand_mw` | 全国总用电需求（MW） |
+| `renewable_score` | 可再生能源占比（0~1） |
+
+```json
+[
+  {
+    "datetime": "2026-04-24T00:00:00+00:00",
+    "wind_mw": 1200.0,
+    "solar_mw": 3.0,
+    "total_demand_mw": 3000.0,
+    "renewable_score": 0.401
+  }
+]
+```
+
+---
+
 ### GET `/api/recommendations`
 
 返回 K-Means 算法推荐的 10 个新 EV 充电站位置，按优先级排序（rank 1 最优先），GeoJSON FeatureCollection 格式。
@@ -198,7 +247,7 @@ backend/
 ├── database.py                # 数据库连接（Supabase）
 ├── routers/
 │   ├── chargers.py            # GET /api/chargers
-│   ├── energy.py              # GET /api/energy/latest
+│   ├── energy.py              # GET /api/energy/latest, GET /api/energy/timeseries
 │   ├── recommendations.py     # GET /api/recommendations
 │   └── traffic.py             # GET /api/traffic
 ├── ingest/
