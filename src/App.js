@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import HeatmapLayer from './HeatmapLayer';
 import LoginPage from './LoginPage';
 import GuidanceModal from './GuidanceModal';
+import EnergyChart from './EnergyChart';
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -47,6 +48,7 @@ const LAYERS = {
   chargers: { id: 'chargers', label: 'Existing Chargers', icon: '🔌', description: 'Public EV charging stations currently in Dublin', color: '#3498db' },
   recommendations: { id: 'recommendations', label: 'Recommended New Sites', icon: '⭐', description: 'AI-suggested locations for new charging stations', color: '#e74c3c' },
   heatmap: { id: 'heatmap', label: 'Traffic Demand Heatmap', icon: '🔥', description: 'Areas with high traffic volume need more chargers', color: '#f39c12' },
+  energy: { id: 'energy', label: 'Renewable Energy Chart', icon: '🌱', description: 'Ireland wind & solar generation over the last 7 days', color: '#16a34a' },
 };
 
 const TILE_LAYERS = {
@@ -147,6 +149,7 @@ function App() {
     chargers: true,
     recommendations: true,
     heatmap: false,
+    energy: false,
   });
   const [tileMode, setTileMode] = useState('standard');
   const [showSidebar, setShowSidebar] = useState(true);
@@ -205,12 +208,14 @@ function App() {
     <div style={{ height: '100vh', width: '100%', display: 'flex', flexDirection: 'column' }}>
 
       {showGuide && <GuidanceModal onClose={() => setShowGuide(false)} />}
+      {activeLayers.energy && <EnergyChart onClose={() => toggleLayer('energy')} />}
 
+      {/* Header */}
       <div style={{ height: '55px', background: '#1a252f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', flexShrink: 0 }}>
         <h2 style={{ margin: 0, fontSize: '16px', fontWeight: '500' }}>
           ⚡ EcoCharge Dublin — EV Infrastructure Planning Dashboard
         </h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             onClick={() => setShowSidebar(v => !v)}
             style={{ background: '#2c3e50', border: 'none', color: '#fff', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
@@ -234,6 +239,7 @@ function App() {
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
+        {/* Sidebar */}
         {showSidebar && (
           <div style={{
             width: '220px', background: '#1a252f', color: '#fff',
@@ -265,6 +271,7 @@ function App() {
           </div>
         )}
 
+        {/* Map */}
         <div style={{ flex: 1, position: 'relative' }}>
           <MapContainer center={[53.3498, -6.2603]} zoom={11} style={{ height: '100%', width: '100%' }}>
             <TileLayer
