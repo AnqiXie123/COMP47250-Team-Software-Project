@@ -80,11 +80,15 @@ Output: `output/dublin_roads.geojson`
 ```bash
 python 05_build_feature_dataset.py
 ```
-Combines all upstream outputs into a single feature table for K-Means clustering, using Haversine distance to compute proximity features.
+Combines DLR and DCC traffic data with EV charger and road data into a single feature table for K-Means clustering, using Haversine distance to compute proximity features.
 
-Output: `output/unified_features.csv`
-- 223 rows (one per DLR traffic site)
-- Fields: `location_id, lat, lon, traffic_volume, charger_count_nearby, renewable_score, road_density, ev_penetration_proxy`
+**Note:** DLR's 223 sites overlap almost entirely with DCC's coverage (222 of 223 are the same physical SCATS sensors, confirmed by site_id and 0m distance match). Where a site exists in both sources, the DCC value (2024-2025, more recent) is kept and the DLR value (2023) is discarded — see script docstring for full reasoning.
+
+Output: `output/unified_features_v2.csv` (supersedes `unified_features.csv`, which is kept for comparison)
+- 974 rows (1 DLR-only site + 973 DCC sites, including deduplicated overlap)
+- Fields: `location_id, lat, lon, traffic_volume, traffic_source, charger_count_nearby, road_density, ev_penetration_proxy`
+- `traffic_source` indicates which dataset traffic_volume came from (`DLR_2023` or `DCC_2024_2025`)
+- `renewable_score` has been removed (was a constant national value, no spatial signal — see Known Limitations)
 - Delivered to ML teammate for K-Means clustering
 
 ### Step 6 — Clean DCC traffic data
@@ -145,10 +149,11 @@ psql -U postgres -d ecocharge -f schema.sql
 - SDCC charger data: 23 out of 33 records could not be geocoded due to
   ambiguous address strings; these are excluded from the output
 - EirGrid data covers Ireland nationally; no Dublin sub-region breakdown
-  is available — the renewable_score used in the K-Means feature set
-  (05_build_feature_dataset.py) is a single national mean and adds no
-  spatial signal; the full time-series (02 output) is used separately
-  as a dashboard visualisation layer instead
+  is available. renewable_score was previously included as a K-Means
+  feature but added no spatial signal (single national constant) — it
+  has been removed from unified_features_v2.csv as of 06-29-2026. The
+  full time-series (02 output) is still used separately as a dashboard
+  visualisation layer
 - Coordinate-based deduplication of EV chargers (merging records within
   50m radius) has not yet been implemented — ESB and DLR datasets may
   contain duplicate physical charging stations recorded by different

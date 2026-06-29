@@ -134,6 +134,31 @@ the primary dataset; DLR and SDCC provide supplementary detail.
   3,164,738); 117 unique site_ids have no matching location record
 - Status: ✅ Downloaded and used in 06_clean_traffic_dcc.py
 
+#### Update (06-29-2026): DCC and DLR coverage overlap discovered
+While merging DLR (03 output) and DCC (06 output) in
+05_build_feature_dataset.py, a direct check against the real site
+coordinates (see check_dlr_dcc_overlap.py) found that **222 of
+DLR's 223 sites share the exact same site_id as a DCC site, at 0m
+apart** — i.e. the same physical SCATS sensor. DCC's administrative
+coverage is far larger than initially assumed during Phase 1 (it is
+not limited to the city centre; it extends into areas such as
+Terenure, Crumlin, and Drumcondra, well beyond what "city centre"
+suggested). DLR's coverage area sits almost entirely *inside* DCC's.
+
+This means the two datasets are not independent/complementary in
+the way the Phase 1 feasibility write-up assumed — they substantially
+describe the same physical sensors, reported by different councils
+for different time periods (DLR: 2023 full year; DCC: 5 months of
+2024-2025). The deduplication rule used in 05 keeps the DCC value
+(more recent) where both exist; see 05_build_feature_dataset.py's
+docstring for the full reasoning.
+
+**Implication for FCC investigation:** given that DCC's true coverage
+was significantly underestimated on first search, it may be worth
+re-investigating whether an FCC (Fingal) traffic/charger dataset
+exists under a less obvious name or administrative grouping, rather
+than concluding none exists based on the Phase 1 search alone.
+
 #### Dataset 3: Traffic Flow Data — SDCC Apr–Sep 2024
 - Dataset URL: https://data.smartdublin.ie/dataset/traffic-flow-data-01-april-to-19-september-2024-sdcc
 - Source organisation: South Dublin County Council

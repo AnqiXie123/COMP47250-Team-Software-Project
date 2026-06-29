@@ -3,27 +3,67 @@
 ---------------------------
 Constructs the unified feature dataset for K-Means clustering.
 
-Each row represents one SCATS traffic sensor site (223 sites in
-DLR area). For each site, we calculate:
-  - traffic_volume        : mean hourly vehicle count across 2023
+Each row represents one SCATS traffic sensor site. Coverage now
+combines two traffic sources rather than DLR alone:
+  - DLR (Dun Laoghaire-Rathdown), 223 sites, full year 2023
+  - DCC (Dublin City), 973 sites with coordinates, partial coverage
+    (Dec 2024, Mar/Apr/May/Aug 2025 — other months not published)
+
+IMPORTANT — these two sources overlap substantially. A check against
+the real data (see check_dlr_dcc_overlap.py) found that 222 of the
+223 DLR sites share the same site_id, at 0m apart, with a DCC site —
+i.e. DLR's coverage area sits almost entirely inside DCC's, and most
+"DLR sites" are the same physical SCATS sensors also captured in the
+DCC dataset, just reported by a different council and for a
+different time period. This is not simply two complementary
+datasets to concatenate; site_id must be deduplicated across them.
+
+Deduplication rule (decided 2026-06-29, see team chat log): for any
+site_id present in both sources, the DCC value (2024-2025, more
+recent) is kept and the DLR value (2023) is discarded. Sites present
+in only one source are kept as-is. This means traffic_volume for a
+formerly-DLR site may now reflect a different time period than
+before — see the `traffic_source` column for full traceability.
+
+renewable_score has been REMOVED from this version's output. It
+was previously a single national mean value (~0.41) duplicated
+across every row, contributing no spatial signal to clustering.
+EirGrid does not publish sub-regional data, so until a spatially
+explicit energy data source is found (e.g. ESB Networks substation
+locations), this column is dropped rather than populated with a
+constant placeholder. The full EirGrid time-series is still used
+separately as a dashboard visualisation layer (see
+02_clean_energy_data.py output), just not as a clustering feature.
+
+For each site, we calculate:
+  - traffic_volume        : mean hourly vehicle count (DLR 2023 or
+                             DCC 2024-2025, per the dedup rule above)
+  - traffic_source         : which dataset traffic_volume came from
+                             ("DLR_2023" or "DCC_2024_2025") — kept
+                             for traceability since the two sources
+                             cover different time periods
   - charger_count_nearby  : number of EV chargers within 500m
-  - renewable_score       : mean renewable energy score (2026 data)
   - road_density          : number of road segments within 500m
   - ev_penetration_proxy  : fixed Dublin weighting (0.049)
 
 Input files:
   output/cleaned_traffic_dlr_2023.csv   (from 03_clean_traffic_data.py)
-  output/dublin_ev_chargers.geojson     (from 01_clean_ev_chargers.py)
-  output/eirgrid_renewable_2026.csv     (from 02_clean_energy_data.py)
+  output/cleaned_traffic_dcc_2025.csv   (from 06_clean_traffic_dcc.py)
+  output/dublin_ev_chargers.geojson     (from 01_clean_ev_chargers.py,
+                                          deduplicated version, 115 records)
   output/dublin_roads.geojson           (from 04_fetch_osm_roads.py)
 
 Output:
-  output/unified_features.csv
-  - 223 rows (one per SCATS site)
-  - Fields: location_id, lat, lon, traffic_volume,
-            charger_count_nearby, renewable_score,
-            road_density, ev_penetration_proxy
+  output/unified_features_v2.csv
+  - ~974 rows (one per unique site across DLR + DCC; exact count
+    depends on how many DCC sites have valid coordinates at run
+    time, since the DCC site location join is not 100% complete —
+    see 06_clean_traffic_dcc.py)
+  - Fields: location_id, lat, lon, traffic_volume, traffic_source,
+            charger_count_nearby, road_density, ev_penetration_proxy
   - No null values
+  - Named _v2 (not overwriting unified_features.csv) so the
+    interim-stage file remains available for comparison/reference
 
 Usage:
   python 05_build_feature_dataset.py
@@ -51,13 +91,14 @@ def haversine(lat1, lon1, lat2, lon2):
          + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2)
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-# 1. Load traffic data — compute mean hourly volume per site
-print("Loading traffic data...")
-traffic = pd.read_csv("output/cleaned_traffic_dlr_2023.csv")
+# 1. Load traffic data from BOTH sources and merge with deduplication
+#
+# Step 1a: DLR — compute mean hourly volume per site (2023 full year)
+print("Loading DLR traffic data...")
+dlr_traffic = pd.read_csv("output/cleaned_traffic_dlr_2023.csv")
 
-# Get one row per site with mean traffic volume and coordinates
-site_traffic = (
-    traffic.groupby("site_id")
+dlr_site_traffic = (
+    dlr_traffic.groupby("site_id")
     .agg(
         traffic_volume=("sum_volume", "mean"),
         lat=("lat", "first"),
@@ -65,8 +106,78 @@ site_traffic = (
     )
     .reset_index()
 )
-site_traffic["traffic_volume"] = site_traffic["traffic_volume"].round(2)
-print(f"Sites loaded: {len(site_traffic)}")
+dlr_site_traffic["traffic_volume"] = dlr_site_traffic["traffic_volume"].round(2)
+dlr_site_traffic["site_id"] = dlr_site_traffic["site_id"].astype(str)
+dlr_site_traffic["traffic_source"] = "DLR_2023"
+# Drop any site with no coordinates — can't be used spatially
+dlr_site_traffic = dlr_site_traffic.dropna(subset=["lat", "lon"])
+print(f"DLR sites loaded (with coords): {len(dlr_site_traffic)}")
+
+# Step 1b: DCC — compute mean hourly volume per site (2024-12, 2025
+# Mar/Apr/May/Aug — see 06_clean_traffic_dcc.py for the documented
+# month gaps)
+print("Loading DCC traffic data...")
+dcc_traffic = pd.read_csv("output/cleaned_traffic_dcc_2025.csv")
+
+dcc_site_traffic = (
+    dcc_traffic.groupby("site_id")
+    .agg(
+        traffic_volume=("sum_volume", "mean"),
+        lat=("lat", "first"),
+        lon=("lon", "first")
+    )
+    .reset_index()
+)
+dcc_site_traffic["traffic_volume"] = dcc_site_traffic["traffic_volume"].round(2)
+dcc_site_traffic["site_id"] = dcc_site_traffic["site_id"].astype(str)
+dcc_site_traffic["traffic_source"] = "DCC_2024_2025"
+# Drop sites with no coordinates — 06's site-location join is not
+# 100% complete (95.1% match rate), so some DCC sites have null
+# lat/lon and cannot be used here.
+dcc_site_traffic = dcc_site_traffic.dropna(subset=["lat", "lon"])
+print(f"DCC sites loaded (with coords): {len(dcc_site_traffic)}")
+
+# Step 1c: Merge with deduplication.
+#
+# A check against the real data (check_dlr_dcc_overlap.py) found
+# that DLR's coverage area sits almost entirely inside DCC's — 222
+# of 223 DLR site_ids are also present in DCC, at the same physical
+# location (0m apart in nearly every case). These are NOT two
+# independent datasets to concatenate; they are largely the same
+# real-world sensors, reported by two different councils for two
+# different time periods.
+#
+# Decision: where a site_id exists in both, keep the DCC value
+# (2024-2025, more recent) and discard the DLR value (2023). Sites
+# present in only one source are kept as-is. See module docstring
+# for the full reasoning.
+print("\nMerging DLR and DCC, with DCC taking priority for overlapping site_ids...")
+
+dcc_site_ids = set(dcc_site_traffic["site_id"])
+dlr_only = dlr_site_traffic[~dlr_site_traffic["site_id"].isin(dcc_site_ids)]
+
+print(f"DLR sites also present in DCC (dropped, DCC value used instead): "
+      f"{len(dlr_site_traffic) - len(dlr_only)}")
+print(f"DLR sites NOT in DCC (kept as DLR_2023): {len(dlr_only)}")
+
+site_traffic = pd.concat(
+    [dcc_site_traffic, dlr_only], ignore_index=True
+)
+
+# Sanity check: site_id should now be unique. If this fails, the
+# dedup logic above has a bug and must be fixed before continuing —
+# duplicate site_ids would silently double-count locations in the
+# K-Means input, the same kind of issue this script is being
+# revised to avoid.
+n_dupes = site_traffic["site_id"].duplicated().sum()
+if n_dupes > 0:
+    raise ValueError(
+        f"{n_dupes} duplicate site_id(s) remain after merge — "
+        "dedup logic is broken, do not proceed to K-Means with this output."
+    )
+
+print(f"Total unique sites after merge: {len(site_traffic)}")
+print(f"  By source: {site_traffic['traffic_source'].value_counts().to_dict()}")
 
 # 2. Load EV charger data
 print("Loading EV charger data...")
@@ -98,15 +209,10 @@ for feat in road_data["features"]:
 
 print(f"Road segments loaded: {len(road_points)}")
 
-# 4. Load renewable energy data — compute overall mean score
-print("Loading renewable energy data...")
-energy = pd.read_csv("output/eirgrid_renewable_2026.csv")
-
-# Use a single mean renewable_score across all timestamps.
-# This is a simplification — a more sophisticated version would
-# join by timestamp, but for the Interim MVP a static score is sufficient.
-mean_renewable_score = round(energy["renewable_score"].mean(), 4)
-print(f"Mean renewable score: {mean_renewable_score}")
+# 4. (Renewable energy step removed — see module docstring. The
+# renewable_score column is no longer produced here; the full
+# EirGrid time-series remains available separately in
+# output/eirgrid_renewable_2026.csv for dashboard visualisation.)
 
 # 5. Calculate features for each site
 print("\nCalculating features for each site (this may take 1-2 minutes)...")
@@ -141,12 +247,12 @@ for idx, site in site_traffic.iterrows():
 print("\nAssembling feature dataset...")
 
 features_df = pd.DataFrame({
-    "location_id":          site_traffic["site_id"].astype(str),
+    "location_id":          site_traffic["site_id"],
     "lat":                  site_traffic["lat"].round(6),
     "lon":                  site_traffic["lon"].round(6),
     "traffic_volume":       site_traffic["traffic_volume"],
+    "traffic_source":       site_traffic["traffic_source"],
     "charger_count_nearby": charger_counts,
-    "renewable_score":      mean_renewable_score,
     "road_density":         road_densities,
     "ev_penetration_proxy": 0.049
     # Dublin EV ownership rate (4.9%) from CSO Sustainable
@@ -158,6 +264,7 @@ features_df = pd.DataFrame({
 print("\n=== Quality Check ===")
 print(f"Total rows: {len(features_df)}")
 print(f"Null values: {features_df.isnull().sum().sum()}")
+print(f"By traffic_source: {features_df['traffic_source'].value_counts().to_dict()}")
 print(f"traffic_volume  — mean: {features_df['traffic_volume'].mean():.1f}, "
       f"min: {features_df['traffic_volume'].min():.1f}, "
       f"max: {features_df['traffic_volume'].max():.1f}")
@@ -167,11 +274,15 @@ print(f"road_density    — mean: {features_df['road_density'].mean():.1f}, "
       f"max: {features_df['road_density'].max()}")
 
 # 8. Export
-output_path = "output/unified_features.csv"
+output_path = "output/unified_features_v2.csv"
 features_df.to_csv(output_path, index=False)
 
 print(f"\nSaved: {output_path}")
 print(f"Final record count: {len(features_df)}")
 print("\nSample:")
 print(features_df.head(5).to_string(index=False))
+print("\nNOTE: renewable_score is no longer included in this file —")
+print("see module docstring for why. Inform the ML teammate before")
+print("they re-run K-Means: the feature set, row count, and traffic")
+print("time period composition have all changed from unified_features.csv.")
 print("\nFeature dataset ready for ML teammate (K-Means clustering).")
