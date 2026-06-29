@@ -34,8 +34,29 @@ from geopy.extra.rate_limiter import RateLimiter
 import time
 import json
 import os
+import math
 
 os.makedirs("output", exist_ok=True)
+
+
+# Helper: Haversine distance
+# Same formula as used in 05_build_feature_dataset.py, kept here as
+# well (rather than imported) so this script has no dependency on
+# 05 and can be run standalone, in pipeline order, before 05 exists
+# in a fresh checkout.
+def haversine(lat1, lon1, lat2, lon2):
+    """
+    Calculate the distance in metres between two lat/lon points
+    using the Haversine formula. Used here to detect duplicate
+    charging stations recorded by more than one data source.
+    """
+    R = 6371000  # Earth radius in metres
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = (math.sin(dphi / 2) ** 2
+         + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 # 1. ESB eCars (primary, covers all Dublin)
 # ESB eCars is Ireland's largest public charging network operator.
@@ -147,10 +168,96 @@ print(f"\nTotal before dedup: {len(combined)} records")
 
 # Remove any records where geocoding failed (lat or lon is None/NaN).
 # These cannot be used for spatial analysis.
-combined = combined.dropna(subset=["lat", "lon"])
+combined = combined.dropna(subset=["lat", "lon"]).reset_index(drop=True)
 print(f"Total after dropping null coords: {len(combined)} records")
 
-# 5. Export to GeoJSON
+# 5. Deduplicate physically-identical charging stations
+# ESB (national), DLR, and SDCC are independent datasets that can
+# describe the same real-world charging station — e.g. a Luas park
+# & ride site appearing once in ESB's national list and once in
+# DLR's local list with near-identical coordinates and address text.
+# We merge any records within DEDUP_RADIUS_M of each other.
+#
+# Records are grouped using a union-find (connected components)
+# approach rather than simple pairwise merging. This matters because
+# duplication is sometimes transitive across three records, not just
+# two — e.g. esb_65, dlr_8, and dlr_27 all describe the same
+# Stillorgan Luas Park & Ride site, with dlr_8 and dlr_27 also being
+# an internal DLR duplicate. A naive pairwise pass risks merging only
+# two of the three and leaving one stray duplicate behind; union-find
+# guarantees the full group is merged together in one pass.
+#
+# When a group contains multiple records, the representative kept is:
+#   1. The ESB_national record, if one exists in the group (ESB is
+#      the primary, most complete national dataset — see README).
+#   2. Otherwise, the record that appears first in the merged table
+#      (i.e. lowest row index — earliest in ESB > DLR > SDCC order).
+DEDUP_RADIUS_M = 50
+
+print(f"\nChecking for duplicate stations within {DEDUP_RADIUS_M}m...")
+
+n = len(combined)
+parent = list(range(n))
+
+
+def find(x):
+    while parent[x] != x:
+        x = parent[x]
+    return x
+
+
+def union(x, y):
+    rx, ry = find(x), find(y)
+    if rx != ry:
+        parent[rx] = ry
+
+
+lats = combined["lat"].to_numpy()
+lons = combined["lon"].to_numpy()
+
+# O(n^2) pairwise comparison. With ~134 records this runs in well
+# under a second; if the merged dataset grows substantially larger
+# (e.g. after adding more county council sources), a spatial index
+# (e.g. a KD-tree via scipy.spatial.cKDTree) would be a faster
+# alternative, but is not necessary at this scale.
+for i in range(n):
+    for j in range(i + 1, n):
+        d = haversine(lats[i], lons[i], lats[j], lons[j])
+        if d <= DEDUP_RADIUS_M:
+            union(i, j)
+
+groups = {}
+for i in range(n):
+    root = find(i)
+    groups.setdefault(root, []).append(i)
+
+duplicate_groups = {k: v for k, v in groups.items() if len(v) > 1}
+n_duplicate_records = sum(len(v) for v in duplicate_groups.values())
+print(f"Found {len(duplicate_groups)} duplicate groups "
+      f"covering {n_duplicate_records} records "
+      f"({n_duplicate_records - len(duplicate_groups)} will be removed)")
+
+# Pick a representative index for each group, then build the final
+# row order by keeping one row per group (sorted by the original
+# index of the representative, to keep output order stable).
+keep_indices = []
+for root, idxs in groups.items():
+    if len(idxs) == 1:
+        keep_indices.append(idxs[0])
+        continue
+    # Prefer ESB_national if present in this group
+    esb_idxs = [i for i in idxs if combined.loc[i, "source_area"] == "ESB_national"]
+    representative = esb_idxs[0] if esb_idxs else min(idxs)
+    keep_indices.append(representative)
+
+    merged_ids = [combined.loc[i, "id"] for i in idxs]
+    kept_id = combined.loc[representative, "id"]
+    print(f"  Merged {merged_ids} -> kept {kept_id}")
+
+combined = combined.loc[sorted(keep_indices)].reset_index(drop=True)
+print(f"Total after deduplication: {len(combined)} records")
+
+# 6. Export to GeoJSON
 # Convert the DataFrame to a GeoDataFrame by creating Point geometries.
 # Point(lon, lat) — note longitude first, then latitude (GeoJSON standard).
 # CRS EPSG:4326 = WGS84, the standard GPS coordinate system.
