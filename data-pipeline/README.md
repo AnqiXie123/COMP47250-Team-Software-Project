@@ -85,7 +85,7 @@ Combines DLR and DCC traffic data with EV charger and road data into a single fe
 **Note:** DLR's 223 sites overlap almost entirely with DCC's coverage (222 of 223 are the same physical SCATS sensors, confirmed by site_id and 0m distance match). Where a site exists in both sources, the DCC value (2024-2025, more recent) is kept and the DLR value (2023) is discarded — see script docstring for full reasoning.
 
 Output: `output/unified_features_v2.csv` (supersedes `unified_features.csv`, which is kept for comparison)
-- 974 rows (1 DLR-only site + 973 DCC sites, including deduplicated overlap)
+- 1039 rows (1 DLR-only site + 973 DCC sites, including deduplicated overlap)
 - Fields: `location_id, lat, lon, traffic_volume, traffic_source, charger_count_nearby, road_density, ev_penetration_proxy`
 - `traffic_source` indicates which dataset traffic_volume came from (`DLR_2023` or `DCC_2024_2025`)
 - `renewable_score` has been removed (was a constant national value, no spatial signal — see Known Limitations)
@@ -105,6 +105,22 @@ Output: `output/cleaned_traffic_dcc_2025.csv` (not committed to GitHub — ~190M
 - ~3.16 million rows, 1,090 sites, hourly resolution
 - 95.1% coordinate match rate (117 site_ids have no matching location record)
 - Fields: `site_id, datetime, region, sum_volume, avg_volume, lat, lon`
+
+### Step 7 — Clean SDCC traffic data
+```bash
+python 07_clean_traffic_sdcc.py
+```
+Extends traffic coverage into South Dublin by cleaning SCOOT-based traffic flow data and joining SDCC site location coordinates.
+
+**Manual setup required:** Before running, place these files in `raw/`:
+- `Traffic_Flow_Data_*_SDCC.geojson` — download from Smart Dublin (SDCC traffic flow datasets)
+- `sdcc_site_names.csv` — download from [South Dublin County Council Open Data](https://data-sdublincoco.opendata.arcgis.com/datasets/sdublincoco::traffic-data-site-names-sdcc) (CSV download, not the data.smartdublin.ie listing page, which does not host the file directly)
+
+Output: `output/cleaned_traffic_sdcc_2024.csv`
+- 65 sites (37 physical junctions, multiple detection directions each) — confirmed via repeated download that this is South Dublin's full SCOOT network extent, not a truncated/partial download
+- 100% coordinate match rate
+- Fields: `site_id, flow, lat, lon, locn`
+- **Note:** `flow` is a SCOOT-modelled demand estimate, not a direct SCATS vehicle count — values are ~5x smaller than DCC/DLR on average. See 05's docstring for how this is flagged downstream.
 
 ---
 

@@ -176,6 +176,29 @@ than concluding none exists based on the Phase 1 search alone.
 - Status: ⚠️ Usable data values but requires site location
   lookup for spatial analysis
 
+#### Update (06-29-2026): Site location file found and verified complete
+The site location file referenced as "not yet found" above has been
+located: "Traffic Data Site Names SDCC" on South Dublin County
+Council's own ArcGIS Hub portal (not on data.smartdublin.ie directly
+— that page only lists/describes the dataset and links out to the
+real host). Direct CSV download confirmed via two independent
+fetches to return identical content (37 physical sites, 65 detection
+points after accounting for multiple directions per junction) —
+this is the network's true full extent, not a truncated download.
+South Dublin's SCOOT network is far smaller than DCC's or DLR's
+SCATS networks, concentrated on motorway junctions (M50, N4, N81)
+and a handful of arterial roads rather than dense urban junctions.
+
+**Unit caveat:** SDCC's `flow` field is a SCOOT-modelled demand
+estimate ("a representation of demand built up over several minutes
+by the SCOOT model" per the source's own field description), not a
+direct vehicle count like SCATS's `sum_volume`. Real data shows
+SDCC's flow values (mean ~142) are roughly 5x smaller than DCC's
+sum_volume (mean ~700) — this may reflect a genuine traffic
+difference, a measurement methodology difference, or both. Flagged
+via the `traffic_source` column in the unified feature dataset;
+not resolved, decision on how to handle left to the ML teammate.
+
 #### Dataset 4: Traffic Counts — Cordon Count DCC, November 2019
 - Dataset URL: https://data.smartdublin.ie/dataset/traffic-volumes
 - Source organisation: Dublin City Council

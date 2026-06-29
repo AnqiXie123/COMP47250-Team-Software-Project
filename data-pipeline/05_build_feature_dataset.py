@@ -3,15 +3,39 @@
 ---------------------------
 Constructs the unified feature dataset for K-Means clustering.
 
-Each row represents one SCATS traffic sensor site. Coverage now
-combines two traffic sources rather than DLR alone:
-  - DLR (Dun Laoghaire-Rathdown), 223 sites, full year 2023
+Each row represents one traffic monitoring site. Coverage combines
+THREE traffic sources:
+  - DLR (Dun Laoghaire-Rathdown), 223 sites, full year 2023, SCATS
   - DCC (Dublin City), 973 sites with coordinates, partial coverage
-    (Dec 2024, Mar/Apr/May/Aug 2025 — other months not published)
+    (Dec 2024, Mar/Apr/May/Aug 2025), SCATS
+  - SDCC (South Dublin), 65 sites (37 physical junctions, multiple
+    detection directions each), 2024, SCOOT — confirmed via repeated
+    fetch that this is the SDCC network's true full extent, not a
+    truncated download (South Dublin's SCATS/SCOOT network is much
+    smaller than DCC's/DLR's, concentrated on motorway junctions and
+    a few arterial roads rather than dense urban junctions)
 
-IMPORTANT — these two sources overlap substantially. A check against
-the real data (see check_dlr_dcc_overlap.py) found that 222 of the
-223 DLR sites share the same site_id, at 0m apart, with a DCC site —
+IMPORTANT — DLR and DCC overlap substantially (see prior note below).
+SDCC, by contrast, uses a different underlying system (SCOOT, not
+SCATS) and a different site-numbering scheme (e.g. "N01111A") with
+no overlap found against DLR/DCC site_ids, so SDCC sites are simply
+added rather than deduplicated against the other two.
+
+CAVEAT ON SDCC UNITS: SDCC's source field is `flow`, which SCOOT
+describes as "a representation of demand built up over several
+minutes by the SCOOT model" — this is a model-derived estimate, not
+a direct vehicle count like SCATS's `sum_volume`. Real data shows
+SDCC's flow values (mean ~142) are roughly 5x smaller than DCC's
+sum_volume (mean ~700), which may reflect a genuine difference in
+what is being measured, not just lower traffic in South Dublin.
+This is flagged via the `traffic_source` column
+(`"SDCC_2024"`) so the ML teammate can decide whether to treat SDCC
+rows differently (e.g. separate scaling) rather than assuming all
+three sources are on the same scale.
+
+DLR/DCC overlap note (unchanged from before): a check against the
+real data (see check_dlr_dcc_overlap.py) found that 222 of the 223
+DLR sites share the same site_id, at 0m apart, with a DCC site —
 i.e. DLR's coverage area sits almost entirely inside DCC's, and most
 "DLR sites" are the same physical SCATS sensors also captured in the
 DCC dataset, just reported by a different council and for a
@@ -19,11 +43,10 @@ different time period. This is not simply two complementary
 datasets to concatenate; site_id must be deduplicated across them.
 
 Deduplication rule (decided 2026-06-29, see team chat log): for any
-site_id present in both sources, the DCC value (2024-2025, more
+site_id present in both DLR and DCC, the DCC value (2024-2025, more
 recent) is kept and the DLR value (2023) is discarded. Sites present
-in only one source are kept as-is. This means traffic_volume for a
-formerly-DLR site may now reflect a different time period than
-before — see the `traffic_source` column for full traceability.
+in only one source are kept as-is. SDCC sites are added without
+dedup since no overlap was found.
 
 renewable_score has been REMOVED from this version's output. It
 was previously a single national mean value (~0.41) duplicated
@@ -36,12 +59,15 @@ separately as a dashboard visualisation layer (see
 02_clean_energy_data.py output), just not as a clustering feature.
 
 For each site, we calculate:
-  - traffic_volume        : mean hourly vehicle count (DLR 2023 or
-                             DCC 2024-2025, per the dedup rule above)
+  - traffic_volume        : mean traffic figure (DLR sum_volume,
+                             DCC sum_volume, or SDCC flow, per source
+                             — see unit caveat above)
   - traffic_source         : which dataset traffic_volume came from
-                             ("DLR_2023" or "DCC_2024_2025") — kept
-                             for traceability since the two sources
-                             cover different time periods
+                             ("DLR_2023", "DCC_2024_2025", or
+                             "SDCC_2024") — kept for traceability
+                             since the three sources cover different
+                             time periods AND, for SDCC, possibly a
+                             different measurement scale
   - charger_count_nearby  : number of EV chargers within 500m
   - road_density          : number of road segments within 500m
   - ev_penetration_proxy  : fixed Dublin weighting (0.049)
@@ -49,16 +75,15 @@ For each site, we calculate:
 Input files:
   output/cleaned_traffic_dlr_2023.csv   (from 03_clean_traffic_data.py)
   output/cleaned_traffic_dcc_2025.csv   (from 06_clean_traffic_dcc.py)
+  output/cleaned_traffic_sdcc_2024.csv  (from 07_clean_traffic_sdcc.py)
   output/dublin_ev_chargers.geojson     (from 01_clean_ev_chargers.py,
                                           deduplicated version, 115 records)
   output/dublin_roads.geojson           (from 04_fetch_osm_roads.py)
 
 Output:
   output/unified_features_v2.csv
-  - ~974 rows (one per unique site across DLR + DCC; exact count
-    depends on how many DCC sites have valid coordinates at run
-    time, since the DCC site location join is not 100% complete —
-    see 06_clean_traffic_dcc.py)
+  - ~1039 rows (974 from DLR+DCC merge + 65 from SDCC; exact count
+    depends on coordinate match rates at run time)
   - Fields: location_id, lat, lon, traffic_volume, traffic_source,
             charger_count_nearby, road_density, ev_penetration_proxy
   - No null values
@@ -176,7 +201,66 @@ if n_dupes > 0:
         "dedup logic is broken, do not proceed to K-Means with this output."
     )
 
-print(f"Total unique sites after merge: {len(site_traffic)}")
+print(f"Total unique sites after DLR+DCC merge: {len(site_traffic)}")
+print(f"  By source: {site_traffic['traffic_source'].value_counts().to_dict()}")
+
+# Step 1d: Load SDCC and add it in.
+#
+# SDCC uses a different underlying system (SCOOT) and a different
+# site-numbering scheme (e.g. "N01111A") from DLR/DCC's numeric
+# SCATS site_ids, so there is no risk of accidental site_id string
+# collision the way there was a real risk with DLR vs DCC. We still
+# check for geographic overlap before assuming this is safe.
+print("\nLoading SDCC traffic data...")
+sdcc_traffic = pd.read_csv("output/cleaned_traffic_sdcc_2024.csv")
+sdcc_traffic = sdcc_traffic.rename(columns={"flow": "traffic_volume"})
+sdcc_traffic["site_id"] = sdcc_traffic["site_id"].astype(str)
+sdcc_traffic["traffic_source"] = "SDCC_2024"
+sdcc_traffic = sdcc_traffic.dropna(subset=["lat", "lon"])
+sdcc_traffic = sdcc_traffic[["site_id", "lat", "lon", "traffic_volume", "traffic_source"]]
+print(f"SDCC sites loaded (with coords): {len(sdcc_traffic)}")
+
+# Geographic overlap check against the merged DLR+DCC set, using the
+# same 100m Haversine approach as check_dlr_dcc_overlap.py. SDCC's
+# site_id strings don't collide with DLR/DCC's numeric ids, but two
+# different ids could still describe a physically close junction.
+def haversine_m(lat1, lon1, lat2, lon2):
+    R = 6371000
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = (math.sin(dphi / 2) ** 2
+         + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+print("Checking SDCC sites for geographic overlap with DLR+DCC (100m)...")
+close_pairs = []
+for _, s_row in sdcc_traffic.iterrows():
+    for _, d_row in site_traffic.iterrows():
+        dist = haversine_m(s_row["lat"], s_row["lon"], d_row["lat"], d_row["lon"])
+        if dist <= 100:
+            close_pairs.append((s_row["site_id"], d_row["site_id"], round(dist, 1)))
+
+if close_pairs:
+    print(f"WARNING: found {len(close_pairs)} SDCC site(s) within 100m of "
+          f"an existing DLR/DCC site — review before proceeding:")
+    for sdcc_id, other_id, dist in close_pairs:
+        print(f"  SDCC {sdcc_id} <-> {other_id}: {dist}m apart")
+else:
+    print("No overlap found — SDCC sites are geographically distinct "
+          "from DLR/DCC coverage. Safe to add without deduplication.")
+
+site_traffic = pd.concat([site_traffic, sdcc_traffic], ignore_index=True)
+
+# Re-run the same sanity check as before, now across all three sources.
+n_dupes = site_traffic["site_id"].duplicated().sum()
+if n_dupes > 0:
+    raise ValueError(
+        f"{n_dupes} duplicate site_id(s) remain after merging in SDCC — "
+        "do not proceed to K-Means with this output."
+    )
+
+print(f"\nTotal unique sites after merging all three sources: {len(site_traffic)}")
 print(f"  By source: {site_traffic['traffic_source'].value_counts().to_dict()}")
 
 # 2. Load EV charger data

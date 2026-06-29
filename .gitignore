@@ -5,6 +5,7 @@
 data-pipeline/raw/
 data-pipeline/output/cleaned_traffic_dlr_2023.csv
 data-pipeline/output/cleaned_traffic_dcc_2025.csv
+data-pipeline/output/cleaned_traffic_sdcc_2024.csv
 
 # Virtual environment
 .venv/
