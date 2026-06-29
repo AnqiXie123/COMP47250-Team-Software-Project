@@ -194,7 +194,15 @@ than concluding none exists based on the Phase 1 search alone.
 
 #### Known Limitations
 - No continuous traffic volume data found for FCC (Fingal /
-  north Dublin) area
+  north Dublin) area. Re-searched on 06-29-2026 (Smart Dublin,
+  data.gov.ie, and Fingal's own open data portal data.fingal.ie)
+  after discovering DCC's site location file had been missed on
+  first search — confirmed FCC has not published a SCATS-equivalent
+  traffic volume dataset or site location file under any name found.
+  Existing FCC traffic-adjacent data (3 cycle counters, parking
+  fines, a single park's vehicle count at Ardgillan Demesne) cannot
+  substitute for junction-level traffic volume. Treated as a
+  confirmed data gap, not an unexplored one.
 - SDCC and DLR SCATS data require joining with separate site
   location files to enable spatial analysis
 - DCC 2025 SCATS data has gaps (several months missing from
