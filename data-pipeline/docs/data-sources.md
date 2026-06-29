@@ -101,19 +101,38 @@ the primary dataset; DLR and SDCC provide supplementary detail.
 - Dataset URL (Jan–Jun): https://data.smartdublin.ie/dataset/dcc-scats-detector-volume-jan-jun-2025
 - Dataset URL (Jul–Dec): https://data.smartdublin.ie/dataset/dcc-scats-detector-volume-jul-dec-2025
 - Source organisation: Dublin City Council
-- Format: CSV (monthly) + SCATS Site Location file (with LAT/LONG)
+- Format: CSV (monthly)
 - Accessible: Y (ZIP download per month)
 - Last updated: 2026-02-12
-- Coverage: Dublin City area, available months: Jan, Mar, Apr, May,
-  Jul, Aug 2025 (some months missing)
+- Coverage: Dublin City area, available months: Dec 2024, Mar, Apr,
+  May, Aug 2025 (other months not published by DCC)
 - Temporal resolution: Hourly
-- Record count: ~5.4 million rows per month
+- Record count: ~5.4–12 million rows per month (varies by month)
 - Key fields: End_Time, Region, Site, Detector, Sum_Volume,
   Avg_Volume, Weighted_Avg, Weighted_Var, Weighted_Std_Dev
-- Note: Site Location file included in ZIP provides LAT/LONG
-  coordinates; this must be joined with volume data for
-  spatial analysis
-- Status: ✅ Primary traffic data source for DCC city centre area
+- Status: ✅ Primary traffic data source for DCC city centre area;
+  processed in 06_clean_traffic_dcc.py
+
+#### Supplementary: SCATS Site Location Data — DCC
+- Dataset URL: https://data.smartdublin.ie/dataset/traffic-signals-and-scats-sites-locations-dcc
+- Direct download (CSV): https://data.smartdublin.ie/dataset/5fd277d3-4ece-45b7-982a-b6116c45470b/resource/f64c93a1-2bce-42d0-8a8b-b41c95546d8a/download/dcc-traffic-scats-signals-google-maps-1.csv
+- Source organisation: Dublin City Council
+- Format: CSV
+- Accessible: Y (direct download)
+- Record count: 1,205 sites
+- Key fields: Site_ID, Location, Lat, Long
+- Update (06-29-2026): Originally assumed to be bundled inside the
+  monthly volume ZIP downloads (see prior note below); this was
+  incorrect. The site location data is published as a separate,
+  independent dataset and was not found during the initial Phase 1
+  search. It has since been located and is used in
+  06_clean_traffic_dcc.py. Site_ID joins directly against the
+  numeric Site column in the volume data (e.g. Site_ID 58 = "Dorset
+  St / Frederick St / Blessington St", confirmed against
+  SCATSMarch2025.csv).
+- Coordinate match rate: 95.1% of volume rows (3,010,817 /
+  3,164,738); 117 unique site_ids have no matching location record
+- Status: ✅ Downloaded and used in 06_clean_traffic_dcc.py
 
 #### Dataset 3: Traffic Flow Data — SDCC Apr–Sep 2024
 - Dataset URL: https://data.smartdublin.ie/dataset/traffic-flow-data-01-april-to-19-september-2024-sdcc

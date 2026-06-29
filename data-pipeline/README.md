@@ -52,6 +52,56 @@ Output: `output/eirgrid_renewable_2026.csv`
 - Fields: `datetime, wind_mw, solar_mw, total_demand_mw,`
   `wind_penetration, solar_penetration, renewable_score`
 
+### Step 3 — Clean DLR traffic data
+```bash
+python 03_clean_traffic_data.py
+```
+Cleans and aggregates SCATS DLR 2023 monthly traffic data to site level, joined with site location coordinates.
+
+**Manual setup required:** Before running, place these files in `raw/`:
+- `scats_dlr_<month>_2023.csv` (12 monthly files) — download from [Smart Dublin](https://data.smartdublin.ie/dataset/traffic-volumes-from-scats-traffic-management-system-2023)
+- `scats_dlr_site_locations.csv` — download from [Smart Dublin](https://data.smartdublin.ie/dataset/traffic-signals-and-scats-sites-locations-dlr)
+
+Output: `output/cleaned_traffic_dlr_2023.csv` (not committed to GitHub — 110MB, exceeds size limit; see Known Limitations)
+- ~1.9 million rows, 223 monitored sites, hourly resolution
+- Fields: `site_id, datetime, region, sum_volume, avg_volume, lat, lon`
+
+### Step 4 — Fetch OSM road network
+```bash
+python 04_fetch_osm_roads.py
+```
+Fetches Dublin's primary/secondary/tertiary road network from OpenStreetMap via the Overpass API.
+
+Output: `output/dublin_roads.geojson`
+- 10,667 road segments
+- Fields: `road_id, name, highway_type, oneway, maxspeed`
+
+### Step 5 — Build unified feature dataset
+```bash
+python 05_build_feature_dataset.py
+```
+Combines all upstream outputs into a single feature table for K-Means clustering, using Haversine distance to compute proximity features.
+
+Output: `output/unified_features.csv`
+- 223 rows (one per DLR traffic site)
+- Fields: `location_id, lat, lon, traffic_volume, charger_count_nearby, renewable_score, road_density, ev_penetration_proxy`
+- Delivered to ML teammate for K-Means clustering
+
+### Step 6 — Clean DCC traffic data
+```bash
+python 06_clean_traffic_dcc.py
+```
+Extends traffic coverage beyond DLR by cleaning SCATS DCC (Dublin City Council) monthly data and joining DCC site location coordinates.
+
+**Manual setup required:** Before running, place these files in `raw/`:
+- `SCATS<Month><Year>.csv` (available months only: Dec 2024, Mar/Apr/May/Aug 2025 — DCC has not published all months) — download from Smart Dublin DCC SCATS datasets
+- `dcc_site_locations.csv` — download from [Smart Dublin](https://data.smartdublin.ie/dataset/traffic-signals-and-scats-sites-locations-dcc)
+
+Output: `output/cleaned_traffic_dcc_2025.csv` (not committed to GitHub — ~190MB, exceeds size limit; see Known Limitations)
+- ~3.16 million rows, 1,090 sites, hourly resolution
+- 95.1% coordinate match rate (117 site_ids have no matching location record)
+- Fields: `site_id, datetime, region, sum_volume, avg_volume, lat, lon`
+
 ---
 
 ## Database Schema
@@ -61,8 +111,8 @@ See `schema.sql` for the full PostgreSQL + PostGIS + TimescaleDB schema.
 Tables defined:
 - `ev_chargers` — static EV charging station locations
 - `renewable_energy` — time-series wind/solar generation data
-- `traffic_volumes` — hourly SCATS traffic counts (Phase 3)
-
+- `traffic_volumes` — hourly SCATS traffic counts (DLR + DCC)
+- `recommended_locations` — AI-recommended new charger sites (ML pipeline output)
 To initialise the database:
 ```bash
 psql -U postgres -d ecocharge -f schema.sql
@@ -78,9 +128,15 @@ psql -U postgres -d ecocharge -f schema.sql
 | `System-Data-Qtr-Hourly-2026-V4.xlsx` | [EirGrid](https://www.eirgrid.ie/grid/system-and-renewable-data-reports) | Auto-downloaded by `00_fetch_raw_data.py` |
 | `ev-charging-points-dlr.geojson` | [Smart Dublin — DLR](https://data.smartdublin.ie/dataset/public-ev-charging-points-dlr) | Manual download required |
 | `Public_EV_Charging_Points_SDCC.csv` | [Smart Dublin — SDCC](https://data.smartdublin.ie/dataset/public-ev-charging-points-sdcc1) | Manual download required |
+| `SCATS<Month><Year>.csv` | Smart Dublin — DCC SCATS volumes | Manual download required (months vary — see Step 6) |
+| `dcc_site_locations.csv` | [Smart Dublin — DCC site locations](https://data.smartdublin.ie/dataset/traffic-signals-and-scats-sites-locations-dcc) | Manual download required |
 
 > Note: The `raw/` and `output/` directories are excluded from version
 > control via `.gitignore`. Raw data files must be obtained separately.
+> Additionally, `output/cleaned_traffic_dcc_2025.csv` (~190MB) is
+> excluded from version control for the same reason as the DLR
+> traffic file above (GitHub's 100MB file size limit). Run
+> `06_clean_traffic_dcc.py` locally to regenerate it.
 
 ---
 
@@ -89,6 +145,19 @@ psql -U postgres -d ecocharge -f schema.sql
 - SDCC charger data: 23 out of 33 records could not be geocoded due to
   ambiguous address strings; these are excluded from the output
 - EirGrid data covers Ireland nationally; no Dublin sub-region breakdown
-  is available — national figures are used as a documented proxy
+  is available — the renewable_score used in the K-Means feature set
+  (05_build_feature_dataset.py) is a single national mean and adds no
+  spatial signal; the full time-series (02 output) is used separately
+  as a dashboard visualisation layer instead
 - Coordinate-based deduplication of EV chargers (merging records within
-  50m radius) is planned as a Phase 2 database task
+  50m radius) has not yet been implemented — ESB and DLR datasets may
+  contain duplicate physical charging stations recorded by different
+  operators
+- Traffic coverage: DLR (03) covers 223 sites for all of 2023; DCC (06)
+  covers 1,090 sites but only for the months Dublin City Council has
+  published (Dec 2024, Mar/Apr/May/Aug 2025 — other months are missing
+  from the source). SDCC traffic data exists but lacks a usable site
+  location file for spatial joining; FCC (Fingal) has no traffic data
+  source identified at all
+- The unified feature dataset (05) currently uses DLR sites only;
+  merging in DCC coverage is planned but not yet implemented
