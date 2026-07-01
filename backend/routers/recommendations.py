@@ -10,8 +10,8 @@ router = APIRouter()
 async def get_recommendations(db: AsyncSession = Depends(get_db)):
     """Return all recommended new EV charger locations, ranked by gap score."""
     result = await db.execute(text(
-        "SELECT rank, lat, lon, cluster_id, gap_score, traffic_volume, "
-        "charger_count_nearby, renewable_score "
+        "SELECT rank, lat, lon, cluster, gap_score, traffic_volume, "
+        "charger_count_nearby, road_density, traffic_source "
         "FROM recommendations "
         "ORDER BY rank ASC"
     ))
