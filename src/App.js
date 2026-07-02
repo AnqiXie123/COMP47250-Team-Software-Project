@@ -145,6 +145,7 @@ function App() {
   const [chargers, setChargers] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [trafficData, setTrafficData] = useState([]);
+  const [energyData, setEnergyData] = useState([]);
   const [activeLayers, setActiveLayers] = useState({
     chargers: true,
     recommendations: true,
@@ -180,6 +181,10 @@ function App() {
           lon: f.geometry.coordinates[0],
           rank: f.properties.rank,
           gap_score: f.properties.gap_score,
+          traffic_volume: f.properties.traffic_volume,
+          charger_count_nearby: f.properties.charger_count_nearby,
+          road_density: f.properties.road_density,
+          traffic_source: f.properties.traffic_source,
         }));
         setRecommendations(points);
       })
@@ -189,6 +194,11 @@ function App() {
       .then(res => res.json())
       .then(data => setTrafficData(data))
       .catch(err => console.error('Traffic fetch failed:', err));
+
+    fetch('http://127.0.0.1:8000/api/energy/timeseries?days=7&interval=1h')
+      .then(res => res.json())
+      .then(data => setEnergyData(data))
+      .catch(err => console.error('Energy fetch failed:', err));
   }, []);
 
   const toggleLayer = (layerId) => {
@@ -208,7 +218,7 @@ function App() {
     <div style={{ height: '100vh', width: '100%', display: 'flex', flexDirection: 'column' }}>
 
       {showGuide && <GuidanceModal onClose={() => setShowGuide(false)} />}
-      {activeLayers.energy && <EnergyChart onClose={() => toggleLayer('energy')} />}
+      {activeLayers.energy && <EnergyChart data={energyData} onClose={() => toggleLayer('energy')} />}
 
       {/* Header */}
       <div style={{ height: '55px', background: '#1a252f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', flexShrink: 0 }}>
@@ -315,10 +325,14 @@ function App() {
                 })}
               >
                 <Popup>
-                  <div style={{ fontFamily: 'Segoe UI, Arial, sans-serif', minWidth: '200px' }}>
+                  <div style={{ fontFamily: 'Segoe UI, Arial, sans-serif', minWidth: '220px' }}>
                     <h4 style={{ margin: '0 0 8px 0', color: '#e74c3c', fontSize: '14px' }}>⭐ Recommended New Charging Site</h4>
                     <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Priority Rank:</b> #{r.rank} out of 10</p>
                     <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Demand Gap Score:</b> {r.gap_score.toFixed(0)}</p>
+                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Traffic Volume:</b> {r.traffic_volume.toFixed(0)}</p>
+                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Nearby Chargers:</b> {r.charger_count_nearby.toFixed(0)}</p>
+                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Road Density:</b> {r.road_density}</p>
+                    <p style={{ margin: '4px 0', fontSize: '11px', color: '#7f8c8d' }}><b>Data Source:</b> {r.traffic_source}</p>
                     <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#7f8c8d', lineHeight: '1.4' }}>
                       This location has high traffic volume but insufficient charging infrastructure nearby.
                     </p>

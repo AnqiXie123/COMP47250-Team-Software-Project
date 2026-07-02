@@ -1,24 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
-function EnergyChart({ onClose }) {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/energy/timeseries?days=7&interval=1h')
-      .then(res => res.json())
-      .then(raw => {
-        const hourly = raw.filter((_, i) => i % 4 === 0).map(d => ({
-          time: new Date(d.datetime).toLocaleDateString('en-IE', { month: 'short', day: 'numeric', hour: '2-digit' }),
-          wind: Math.round(d.wind_mw),
-          solar: Math.round(d.solar_mw),
-          score: Math.round(d.renewable_score * 100),
-        }));
-        setData(hourly);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+function EnergyChart({ data: rawData, onClose }) {
+  const data = (rawData || []).filter((_, i) => i % 4 === 0).map(d => ({
+    time: new Date(d.datetime).toLocaleDateString('en-IE', { month: 'short', day: 'numeric', hour: '2-digit' }),
+    wind: Math.round(d.wind_mw),
+    solar: Math.round(d.solar_mw),
+    score: Math.round(d.renewable_score * 100),
+  }));
+  const loading = data.length === 0;
 
   const maxVal = Math.max(...data.map(d => d.wind + d.solar), 1);
   const chartWidth = 600;
