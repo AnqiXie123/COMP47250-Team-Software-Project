@@ -48,6 +48,7 @@ const LAYERS = {
   chargers: { id: 'chargers', label: 'Existing Chargers', icon: '🔌', description: 'Public EV charging stations currently in Dublin', color: '#3498db' },
   recommendations: { id: 'recommendations', label: 'Recommended New Sites', icon: '⭐', description: 'AI-suggested locations for new charging stations', color: '#e74c3c' },
   heatmap: { id: 'heatmap', label: 'Traffic Demand Heatmap', icon: '🔥', description: 'Areas with high traffic volume need more chargers', color: '#f39c12' },
+  sdcc: { id: 'sdcc', label: 'SDCC Traffic Sites', icon: '🔵', description: 'South Dublin County Council traffic monitoring sites (2024)', color: '#2563eb' },
   energy: { id: 'energy', label: 'Renewable Energy Chart', icon: '🌱', description: 'Ireland wind & solar generation over the last 7 days', color: '#16a34a' },
 };
 
@@ -145,11 +146,13 @@ function App() {
   const [chargers, setChargers] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [trafficData, setTrafficData] = useState([]);
+  const [sdccData, setSdccData] = useState([]);
   const [energyData, setEnergyData] = useState([]);
   const [activeLayers, setActiveLayers] = useState({
     chargers: true,
     recommendations: true,
     heatmap: false,
+    sdcc: false,
     energy: false,
   });
   const [tileMode, setTileMode] = useState('standard');
@@ -194,6 +197,11 @@ function App() {
       .then(res => res.json())
       .then(data => setTrafficData(data))
       .catch(err => console.error('Traffic fetch failed:', err));
+
+    fetch('http://127.0.0.1:8000/api/traffic?source=SDCC')
+      .then(res => res.json())
+      .then(data => setSdccData(data))
+      .catch(err => console.error('SDCC fetch failed:', err));
 
     fetch('http://127.0.0.1:8000/api/energy/timeseries?days=7&interval=1h')
       .then(res => res.json())
@@ -336,6 +344,27 @@ function App() {
                     <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#7f8c8d', lineHeight: '1.4' }}>
                       This location has high traffic volume but insufficient charging infrastructure nearby.
                     </p>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+
+            {activeLayers.sdcc && sdccData.map((s, i) => (
+              <Marker
+                key={`sdcc_${i}`}
+                position={[s.lat, s.lon]}
+                icon={L.divIcon({
+                  className: '',
+                  html: `<div style="width:12px;height:12px;border-radius:50%;background:white;border:3px solid #2563eb;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div>`,
+                  iconSize: [12, 12],
+                  iconAnchor: [6, 6]
+                })}
+              >
+                <Popup>
+                  <div style={{ fontFamily: 'Segoe UI, Arial, sans-serif', minWidth: '160px' }}>
+                    <h4 style={{ margin: '0 0 6px 0', color: '#2563eb', fontSize: '13px' }}>🔵 SDCC Traffic Site</h4>
+                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Traffic Volume:</b> {s.volume.toFixed(0)}</p>
+                    <p style={{ margin: '4px 0', fontSize: '11px', color: '#7f8c8d' }}>South Dublin County Council · 2024</p>
                   </div>
                 </Popup>
               </Marker>

@@ -8,8 +8,13 @@
 # testing
 /coverage
 
+<<<<<<< HEAD
 # production
 /build
+=======
+# Internal docs (not for repo)
+docs/
+>>>>>>> 59aed5d01a746dfc9d80c41d581ed81e5c40faf4
 
 # misc
 .DS_Store

@@ -119,6 +119,55 @@ curl http://127.0.0.1:8000/api/energy/latest
 
 ---
 
+### GET `/api/energy/timeseries`
+
+返回时序能源数据，供前端画折线图。支持按时间范围和粒度过滤。
+
+**查询参数：**
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `days` | 正整数 或 `all` | `7` | 返回最近 N 天数据；`all` 返回全部 |
+| `interval` | `15m` / `1h` / `1d` | `15m` | 数据粒度（15分钟 / 按小时聚合 / 按天聚合） |
+
+**组合限制：**
+
+| `days` | 允许的 `interval` |
+|--------|-----------------|
+| ≤ 7 | `15m`, `1h`, `1d` |
+| 8 ~ 90 | `1h`, `1d` |
+| > 90 或 `all` | `1d` |
+
+违规组合返回 `400 Bad Request`。
+
+```bash
+curl "http://127.0.0.1:8000/api/energy/timeseries?days=7&interval=1h"
+```
+
+**返回字段：**
+
+| 字段 | 说明 |
+|------|------|
+| `datetime` | 时间戳（UTC） |
+| `wind_mw` | 风力发电量（MW） |
+| `solar_mw` | 太阳能发电量（MW） |
+| `total_demand_mw` | 全国总用电需求（MW） |
+| `renewable_score` | 可再生能源占比（0~1） |
+
+```json
+[
+  {
+    "datetime": "2026-04-24T00:00:00+00:00",
+    "wind_mw": 1200.0,
+    "solar_mw": 3.0,
+    "total_demand_mw": 3000.0,
+    "renewable_score": 0.401
+  }
+]
+```
+
+---
+
 ### GET `/api/recommendations`
 
 返回 K-Means 算法推荐的 10 个新 EV 充电站位置，按优先级排序（rank 1 最优先），GeoJSON FeatureCollection 格式。
@@ -161,6 +210,35 @@ curl http://127.0.0.1:8000/api/recommendations
 
 ---
 
+### GET `/api/traffic`
+
+返回 223 个 Dublin SCATS 交通监测站点的交通流量数据，按流量从高到低排序。
+
+```bash
+curl http://127.0.0.1:8000/api/traffic
+```
+
+**返回字段：**
+
+| 字段 | 说明 |
+|---|---|
+| `lat` | 纬度 |
+| `lon` | 经度 |
+| `volume` | 年均小时交通流量（辆/小时） |
+
+```json
+[
+  { "lat": 53.344, "lon": -6.267, "volume": 1234.5 },
+  { "lat": 53.351, "lon": -6.258, "volume": 1100.2 }
+]
+```
+
+**测试方式：**
+- 浏览器访问：`http://127.0.0.1:8000/api/traffic`
+- Swagger UI：`http://127.0.0.1:8000/docs` → 找到 `/api/traffic` → 点击 Try it out → Execute
+
+---
+
 ## 目录结构
 
 ```
@@ -169,11 +247,13 @@ backend/
 ├── database.py                # 数据库连接（Supabase）
 ├── routers/
 │   ├── chargers.py            # GET /api/chargers
-│   ├── energy.py              # GET /api/energy/latest
-│   └── recommendations.py    # GET /api/recommendations
+│   ├── energy.py              # GET /api/energy/latest, GET /api/energy/timeseries
+│   ├── recommendations.py     # GET /api/recommendations
+│   └── traffic.py             # GET /api/traffic
 ├── ingest/
 │   ├── load_chargers.py       # 导入充电站数据
 │   ├── load_energy.py         # 导入能源数据
-│   └── load_recommendations.py# 导入 K-Means 推荐结果
+│   ├── load_recommendations.py# 导入 K-Means 推荐结果
+│   └── load_traffic.py        # 导入 SCATS 交通流量数据
 └── tests/
 ```
