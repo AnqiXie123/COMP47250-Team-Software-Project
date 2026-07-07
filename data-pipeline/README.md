@@ -84,9 +84,10 @@ Combines DLR and DCC traffic data with EV charger and road data into a single fe
 
 **Note:** DLR's 223 sites overlap almost entirely with DCC's coverage (222 of 223 are the same physical SCATS sensors, confirmed by site_id and 0m distance match). Where a site exists in both sources, the DCC value (2024-2025, more recent) is kept and the DLR value (2023) is discarded — see script docstring for full reasoning.
 
-Output: `output/unified_features_v2.csv` (supersedes `unified_features.csv`, which is kept for comparison)
-- 1039 rows (1 DLR-only site + 973 DCC sites, including deduplicated overlap)
-- Fields: `location_id, lat, lon, traffic_volume, traffic_source, charger_count_nearby, road_density, ev_penetration_proxy`
+Output: `output/unified_features_v3.csv` (supersedes v2, which is kept for reference)
+- 1,039 rows (DLR + DCC + SDCC combined, deduplicated)
+- Fields: `location_id, lat, lon, traffic_volume, traffic_source, distance_to_nearest_substation_m, charger_count_nearby, road_density, ev_penetration_proxy`
+- `distance_to_nearest_substation_m`: Haversine distance to nearest ESB Networks substation — spatial proxy for renewable energy grid access (see Step 8 and `docs/spatial_renewable_investigation.md`)
 - `traffic_source` indicates which dataset traffic_volume came from (`DLR_2023` or `DCC_2024_2025`)
 - `renewable_score` has been removed (was a constant national value, no spatial signal — see Known Limitations)
 - Delivered to ML teammate for K-Means clustering
@@ -121,6 +122,25 @@ Output: `output/cleaned_traffic_sdcc_2024.csv`
 - 100% coordinate match rate
 - Fields: `site_id, flow, lat, lon, locn`
 - **Note:** `flow` is a SCOOT-modelled demand estimate, not a direct SCATS vehicle count — values are ~5x smaller than DCC/DLR on average. See 05's docstring for how this is flagged downstream.
+
+### Step 8 — Clean ESB Networks substation data
+```bash
+python 08_clean_esb_substations.py
+```
+Extracts Dublin-area ESB Networks substation locations from the
+Network Capacity Heatmap Excel file, producing coordinates for
+use as a spatial renewable energy proxy feature in Step 5.
+
+**Manual setup required:** Before running, place this file in `raw/`:
+- `customer-heatmap-download-december-2025.xlsx` — download from
+  [ESB Networks Network Capacity Heatmap](https://www.esbnetworks.ie/services/get-connected/renewable-connection/network-capacity-heatmap)
+  (free download, no registration required, updated quarterly)
+
+Output: `output/dublin_substations.csv`
+- 7,780 substations in the Dublin bounding box (LV: 7,664 / MV: 96 / HV: 20)
+- Fields: `name, voltage_class, lat, lon`
+- MV/LV coordinates are exact; HV coordinates are approximate
+  per ESB Networks' own documentation
 
 ---
 
@@ -165,20 +185,25 @@ psql -U postgres -d ecocharge -f schema.sql
 - SDCC charger data: 23 out of 33 records could not be geocoded due to
   ambiguous address strings; these are excluded from the output
 - EirGrid data covers Ireland nationally; no Dublin sub-region breakdown
-  is available. renewable_score was previously included as a K-Means
-  feature but added no spatial signal (single national constant) — it
-  has been removed from unified_features_v2.csv as of 06-29-2026. The
-  full time-series (02 output) is still used separately as a dashboard
-  visualisation layer
-- Coordinate-based deduplication of EV chargers (merging records within
-  50m radius) has not yet been implemented — ESB and DLR datasets may
-  contain duplicate physical charging stations recorded by different
-  operators
-- Traffic coverage: DLR (03) covers 223 sites for all of 2023; DCC (06)
-  covers 1,090 sites but only for the months Dublin City Council has
-  published (Dec 2024, Mar/Apr/May/Aug 2025 — other months are missing
-  from the source). SDCC traffic data exists but lacks a usable site
-  location file for spatial joining; FCC (Fingal) has no traffic data
-  source identified at all
-- The unified feature dataset (05) currently uses DLR sites only;
-  merging in DCC coverage is planned but not yet implemented
+  is available. The constant `renewable_score` feature has been replaced
+  by `distance_to_nearest_substation_m` in `unified_features_v3.csv` —
+  a spatially differentiated proxy derived from ESB Networks substation
+  locations (7,780 Dublin substations, December 2025). See
+  `docs/spatial_renewable_investigation.md` for the full investigation.
+  The full EirGrid time-series (02 output) is still used separately as
+  a dashboard visualisation layer
+- Coordinate-based deduplication of EV chargers has been implemented
+  (50m radius union-find, 134 → 115 records); however, 23 SDCC charger
+  records remain excluded due to geocoding failures (see first point above)
+- Traffic coverage: DLR (03), DCC (06), and SDCC (07) are all integrated
+  into `unified_features_v3.csv` (1,039 sites total). FCC (Fingal) has
+  no usable traffic data source — confirmed after re-investigation on
+  2026-06-29. SDCC uses SCOOT (not SCATS); its `flow` values average ~5x
+  lower than DCC's `sum_volume` and are excluded from K-Means training
+  per ML teammate's decision, but retained in `traffic_sites` for
+  dashboard heatmap display
+- `output/cleaned_traffic_dlr_2023.csv` (~110MB) and
+  `output/cleaned_traffic_dcc_2025.csv` (~190MB) and
+  `output/cleaned_traffic_sdcc_2024.csv` are excluded from version
+  control due to GitHub's 100MB file size limit; run scripts 03, 06,
+  and 07 locally to regenerate them
