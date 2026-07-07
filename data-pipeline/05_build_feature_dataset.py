@@ -68,6 +68,19 @@ For each site, we calculate:
                              since the three sources cover different
                              time periods AND, for SDCC, possibly a
                              different measurement scale
+  - distance_to_nearest_substation_m : Haversine distance in metres
+                             from each site to the nearest ESB Networks
+                             substation in Dublin. Used as a spatial
+                             proxy for renewable energy grid access —
+                             closer to a substation = lower cost to
+                             connect EV charging infrastructure to the
+                             grid, and greater proximity to renewable
+                             energy injection points (ESB substations
+                             are the nodes through which wind/solar
+                             generation enters the distribution network).
+                             Source: ESB Networks Network Capacity
+                             Heatmap (December 2025), 7,780 Dublin
+                             substations. See 08_clean_esb_substations.py.
   - charger_count_nearby  : number of EV chargers within 500m
   - road_density          : number of road segments within 500m
   - ev_penetration_proxy  : fixed Dublin weighting (0.049)
@@ -76,19 +89,19 @@ Input files:
   output/cleaned_traffic_dlr_2023.csv   (from 03_clean_traffic_data.py)
   output/cleaned_traffic_dcc_2025.csv   (from 06_clean_traffic_dcc.py)
   output/cleaned_traffic_sdcc_2024.csv  (from 07_clean_traffic_sdcc.py)
+  output/dublin_substations.csv         (from 08_clean_esb_substations.py)
   output/dublin_ev_chargers.geojson     (from 01_clean_ev_chargers.py,
                                           deduplicated version, 115 records)
   output/dublin_roads.geojson           (from 04_fetch_osm_roads.py)
 
 Output:
-  output/unified_features_v2.csv
-  - ~1039 rows (974 from DLR+DCC merge + 65 from SDCC; exact count
-    depends on coordinate match rates at run time)
+  output/unified_features_v3.csv
+  - ~1039 rows (974 from DLR+DCC merge + 65 from SDCC)
   - Fields: location_id, lat, lon, traffic_volume, traffic_source,
+            distance_to_nearest_substation_m,
             charger_count_nearby, road_density, ev_penetration_proxy
   - No null values
-  - Named _v2 (not overwriting unified_features.csv) so the
-    interim-stage file remains available for comparison/reference
+  - Named _v3 to distinguish from v2 (without substation feature)
 
 Usage:
   python 05_build_feature_dataset.py
@@ -293,10 +306,14 @@ for feat in road_data["features"]:
 
 print(f"Road segments loaded: {len(road_points)}")
 
-# 4. (Renewable energy step removed — see module docstring. The
-# renewable_score column is no longer produced here; the full
-# EirGrid time-series remains available separately in
-# output/eirgrid_renewable_2026.csv for dashboard visualisation.)
+# 4. Load ESB Networks substation data
+# Used to compute distance_to_nearest_substation_m — a spatial proxy
+# for renewable energy grid access. See 08_clean_esb_substations.py
+# and docs/spatial_renewable_investigation.md for the full rationale.
+print("Loading ESB Networks substation data...")
+substations = pd.read_csv("output/dublin_substations.csv")
+substation_points = list(zip(substations["lat"], substations["lon"]))
+print(f"Substations loaded: {len(substation_points)}")
 
 # 5. Calculate features for each site
 print("\nCalculating features for each site (this may take 1-2 minutes)...")
@@ -305,6 +322,7 @@ RADIUS_M = 500  # 500 metre radius for proximity calculations
 
 charger_counts = []
 road_densities = []
+substation_distances = []
 
 for idx, site in site_traffic.iterrows():
     site_lat = site["lat"]
@@ -324,6 +342,15 @@ for idx, site in site_traffic.iterrows():
     )
     road_densities.append(nearby_roads)
 
+    # Distance to nearest ESB substation (metres)
+    # With 7,780 substations across Dublin, every site will have a
+    # meaningfully different value — this is the spatial renewable proxy.
+    min_dist = min(
+        haversine(site_lat, site_lon, s_lat, s_lon)
+        for s_lat, s_lon in substation_points
+    )
+    substation_distances.append(round(min_dist, 1))
+
     if (idx + 1) % 50 == 0:
         print(f"  Processed {idx + 1}/{len(site_traffic)} sites...")
 
@@ -331,14 +358,15 @@ for idx, site in site_traffic.iterrows():
 print("\nAssembling feature dataset...")
 
 features_df = pd.DataFrame({
-    "location_id":          site_traffic["site_id"],
-    "lat":                  site_traffic["lat"].round(6),
-    "lon":                  site_traffic["lon"].round(6),
-    "traffic_volume":       site_traffic["traffic_volume"],
-    "traffic_source":       site_traffic["traffic_source"],
-    "charger_count_nearby": charger_counts,
-    "road_density":         road_densities,
-    "ev_penetration_proxy": 0.049
+    "location_id":                      site_traffic["site_id"],
+    "lat":                              site_traffic["lat"].round(6),
+    "lon":                              site_traffic["lon"].round(6),
+    "traffic_volume":                   site_traffic["traffic_volume"],
+    "traffic_source":                   site_traffic["traffic_source"],
+    "distance_to_nearest_substation_m": substation_distances,
+    "charger_count_nearby":             charger_counts,
+    "road_density":                     road_densities,
+    "ev_penetration_proxy":             0.049
     # Dublin EV ownership rate (4.9%) from CSO Sustainable
     # Mobility and Transport 2021 report — used as a fixed
     # proxy since county-level breakdown is not available via API
@@ -352,21 +380,23 @@ print(f"By traffic_source: {features_df['traffic_source'].value_counts().to_dict
 print(f"traffic_volume  — mean: {features_df['traffic_volume'].mean():.1f}, "
       f"min: {features_df['traffic_volume'].min():.1f}, "
       f"max: {features_df['traffic_volume'].max():.1f}")
+print(f"distance_to_nearest_substation_m — mean: "
+      f"{features_df['distance_to_nearest_substation_m'].mean():.1f}, "
+      f"min: {features_df['distance_to_nearest_substation_m'].min():.1f}, "
+      f"max: {features_df['distance_to_nearest_substation_m'].max():.1f}")
 print(f"charger_count_nearby — mean: {features_df['charger_count_nearby'].mean():.2f}, "
       f"max: {features_df['charger_count_nearby'].max()}")
 print(f"road_density    — mean: {features_df['road_density'].mean():.1f}, "
       f"max: {features_df['road_density'].max()}")
 
 # 8. Export
-output_path = "output/unified_features_v2.csv"
+output_path = "output/unified_features_v3.csv"
 features_df.to_csv(output_path, index=False)
 
 print(f"\nSaved: {output_path}")
 print(f"Final record count: {len(features_df)}")
 print("\nSample:")
 print(features_df.head(5).to_string(index=False))
-print("\nNOTE: renewable_score is no longer included in this file —")
-print("see module docstring for why. Inform the ML teammate before")
-print("they re-run K-Means: the feature set, row count, and traffic")
-print("time period composition have all changed from unified_features.csv.")
+print("\nNew feature: distance_to_nearest_substation_m — spatial proxy for")
+print("renewable energy grid access (ESB Networks substations, Dec 2025).")
 print("\nFeature dataset ready for ML teammate (K-Means clustering).")
