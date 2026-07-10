@@ -355,3 +355,55 @@ Fuel Type and Year (National)
 - Large queries (full road network) return ~30MB;
   pipeline implementation should filter by road type
   to manage data volume
+
+## 5. Spatial Renewable Energy Data
+
+### Dataset 1: ESB Networks Network Capacity Heatmap
+- Landing page: https://www.esbnetworks.ie/services/get-connected/renewable-connection/network-capacity-heatmap
+- Direct download: https://media.esbnetworks.ie/media/docs/default-source/publications/customer-heatmap-download-december-2025.xlsx
+- Source organisation: ESB Networks (Ireland's licensed electricity distribution operator)
+- Format: Excel (.xlsx), sheet "Heatmap data"
+- Accessible: Y (free, no registration required)
+- Update frequency: Quarterly
+- Current version: December 2025
+- Coverage: All of Ireland, LV/MV/HV substations with coordinates
+- Dublin records: 7,780 substations (LV: 7,664 / MV: 96 / HV: 20)
+- Key fields: Station Name, Voltage Class, Latitude, Longitude
+- Note: MV/LV coordinates are exact; HV coordinates are approximate
+  per ESB Networks' own documentation. Coordinates are WGS84.
+- Status: ✅ Downloaded and used in 08_clean_esb_substations.py to
+  produce output/dublin_substations.csv. Feature
+  distance_to_nearest_substation_m computed in
+  05_build_feature_dataset.py but retained as reference field only —
+  Dublin's grid density (almost all sites within 100m of a substation)
+  makes this feature unsuitable for K-Means clustering. See
+  docs/spatial_renewable_investigation.md for full evaluation.
+
+### Dataset 2: SEAI Wind Farms Connected
+- Landing page: https://data.gov.ie/dataset/wind-farms-in-ireland
+- Direct download: https://seaiopendata.blob.core.windows.net/wind/WindFarmsConnectedJune2022.csv
+- Source organisation: Sustainable Energy Authority of Ireland (SEAI)
+- Format: CSV
+- Accessible: Y (CC BY 4.0, free)
+- Last updated: July 2022 (annual updates per SEAI)
+- Coverage: All connected wind farms in Ireland (ex Northern Ireland)
+- Record count: 313 wind farms, no missing coordinates
+- Key fields: Windfarm_Name, County, Installed_Capacity__MW_,
+  Nat_Grid_E__substation_, Nat_Grid_N__substation_
+- Note: Coordinates are in Irish Grid (EPSG:29902), not WGS84 —
+  converted using pyproj in 09_clean_wind_farms.py
+- Status: ✅ Downloaded and used in 09_clean_wind_farms.py to produce
+  output/ireland_wind_farms.csv. Feature distance_to_nearest_windfarm_km
+  computed in 05_build_feature_dataset.py as the primary spatial
+  renewable proxy for K-Means clustering (range 0.07–22.3km across
+  Dublin sites). See docs/spatial_renewable_investigation.md for
+  full evaluation.
+
+### Known Limitations
+- ESB substation data provides grid infrastructure proximity but not
+  renewable generation share specifically — interpretation as a
+  renewable proxy is indirect
+- SEAI wind farm dataset was last updated July 2022; new wind farms
+  connected since then are not included
+- Wind farm coordinates use substation grid references where direct
+  wind farm coordinates were unavailable (per SEAI's own notes)

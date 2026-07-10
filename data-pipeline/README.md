@@ -38,7 +38,7 @@ Merges three EV charger datasets and geocodes missing coordinates.
 - `Public_EV_Charging_Points_SDCC.csv` — download from [Smart Dublin](https://data.smartdublin.ie/dataset/public-ev-charging-points-sdcc1)
 
 Output: `output/dublin_ev_chargers.geojson`
-- 133 records covering all Dublin areas (ESB eCars + DLR + SDCC)
+- 115 records covering all Dublin areas (ESB eCars + DLR + SDCC, deduplicated using 50m radius union-find)
 - Fields: `id, lat, lon, address, operator, num_chargers, source_area, open_hours`
 
 ### Step 2 — Clean EirGrid energy data
@@ -84,12 +84,12 @@ Combines DLR and DCC traffic data with EV charger and road data into a single fe
 
 **Note:** DLR's 223 sites overlap almost entirely with DCC's coverage (222 of 223 are the same physical SCATS sensors, confirmed by site_id and 0m distance match). Where a site exists in both sources, the DCC value (2024-2025, more recent) is kept and the DLR value (2023) is discarded — see script docstring for full reasoning.
 
-Output: `output/unified_features_v3.csv` (supersedes v2, which is kept for reference)
+Output: `output/unified_features_v4.csv` (supersedes v2/v3, which are kept for reference)
 - 1,039 rows (DLR + DCC + SDCC combined, deduplicated)
-- Fields: `location_id, lat, lon, traffic_volume, traffic_source, distance_to_nearest_substation_m, charger_count_nearby, road_density, ev_penetration_proxy`
-- `distance_to_nearest_substation_m`: Haversine distance to nearest ESB Networks substation — spatial proxy for renewable energy grid access (see Step 8 and `docs/spatial_renewable_investigation.md`)
-- `traffic_source` indicates which dataset traffic_volume came from (`DLR_2023` or `DCC_2024_2025`)
-- `renewable_score` has been removed (was a constant national value, no spatial signal — see Known Limitations)
+- Fields: `location_id, lat, lon, traffic_volume, traffic_source, distance_to_nearest_windfarm_km, distance_to_nearest_substation_m, charger_count_nearby, road_density, ev_penetration_proxy`
+- `distance_to_nearest_windfarm_km`: primary spatial renewable proxy for K-Means — Haversine distance to nearest connected wind farm (SEAI dataset, 313 farms across Ireland, range 0.07–22.3km across Dublin sites; see Step 9)
+- `distance_to_nearest_substation_m`: retained as reference field for dashboard display; NOT recommended for K-Means — Dublin's grid density is too high (range 8–504m) to provide meaningful spatial variation (see `docs/spatial_renewable_investigation.md`)
+- `traffic_source` indicates which dataset traffic_volume came from (`DLR_2023`, `DCC_2024_2025`, or `SDCC_2024`)
 - Delivered to ML teammate for K-Means clustering
 
 ### Step 6 — Clean DCC traffic data
@@ -142,6 +142,22 @@ Output: `output/dublin_substations.csv`
 - MV/LV coordinates are exact; HV coordinates are approximate
   per ESB Networks' own documentation
 
+### Step 9 — Clean SEAI wind farm data
+```bash
+python 09_clean_wind_farms.py
+```
+Processes the SEAI Wind Farms Connected dataset to extract wind farm locations as the primary spatial renewable energy feature for K-Means clustering. Converts coordinates from Irish Grid (EPSG:29902) to WGS84 using pyproj.
+
+**Manual setup required:** Before running, place this file in `raw/`:
+- `WindFarmsConnectedJune2022.csv` — download from [data.gov.ie — SEAI Wind Farms](https://data.gov.ie/dataset/wind-farms-in-ireland) (CSV resource, CC BY 4.0, free download)
+
+**Additional dependency:** `pip install pyproj`
+
+Output: `output/ireland_wind_farms.csv`
+- 313 connected wind farms across Ireland (no missing coordinates)
+- Fields: `name, county, capacity_mw, lat, lon`
+- ~14 wind farms within 60km of Dublin — sparse enough to produce 0.07–22.3km distance variation across Dublin traffic sites, unlike the ESB substation feature which proved too dense for meaningful K-Means differentiation
+
 ---
 
 ## Database Schema
@@ -171,6 +187,7 @@ psql -U postgres -d ecocharge -f schema.sql
 | `SCATS<Month><Year>.csv` | Smart Dublin — DCC SCATS volumes | Manual download required (months vary — see Step 6) |
 | `dcc_site_locations.csv` | [Smart Dublin — DCC site locations](https://data.smartdublin.ie/dataset/traffic-signals-and-scats-sites-locations-dcc) | Manual download required |
 | `customer-heatmap-download-december-2025.xlsx` | [ESB Networks Network Capacity Heatmap](https://www.esbnetworks.ie/services/get-connected/renewable-connection/network-capacity-heatmap) | Manual download required (free, no registration, updated quarterly) |
+| `WindFarmsConnectedJune2022.csv` | [data.gov.ie — SEAI Wind Farms](https://data.gov.ie/dataset/wind-farms-in-ireland) | Manual download required (CC BY 4.0, free) |
 
 > Note: The `raw/` and `output/` directories are excluded from version
 > control via `.gitignore`. Raw data files must be obtained separately.
@@ -189,17 +206,19 @@ psql -U postgres -d ecocharge -f schema.sql
   ambiguous address strings; these are excluded from the output
 - EirGrid data covers Ireland nationally; no Dublin sub-region breakdown
   is available. The constant `renewable_score` feature has been replaced
-  by `distance_to_nearest_substation_m` in `unified_features_v3.csv` —
-  a spatially differentiated proxy derived from ESB Networks substation
-  locations (7,780 Dublin substations, December 2025). See
-  `docs/spatial_renewable_investigation.md` for the full investigation.
+  by `distance_to_nearest_windfarm_km` in `unified_features_v4.csv` —
+  distance to the nearest connected wind farm (SEAI dataset, 313 farms).
+  `distance_to_nearest_substation_m` was evaluated as an intermediate
+  candidate but found unsuitable for K-Means due to Dublin's extremely
+  high grid density (almost all sites within 100m of a substation).
+  See `docs/spatial_renewable_investigation.md` for the full investigation.
   The full EirGrid time-series (02 output) is still used separately as
   a dashboard visualisation layer
 - Coordinate-based deduplication of EV chargers has been implemented
   (50m radius union-find, 134 → 115 records); however, 23 SDCC charger
   records remain excluded due to geocoding failures (see first point above)
 - Traffic coverage: DLR (03), DCC (06), and SDCC (07) are all integrated
-  into `unified_features_v3.csv` (1,039 sites total). FCC (Fingal) has
+  into `unified_features_v4.csv` (1,039 sites total). FCC (Fingal) has
   no usable traffic data source — confirmed after re-investigation on
   2026-06-29. SDCC uses SCOOT (not SCATS); its `flow` values average ~5x
   lower than DCC's `sum_volume` and are excluded from K-Means training
