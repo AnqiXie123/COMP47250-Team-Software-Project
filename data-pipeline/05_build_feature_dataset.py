@@ -90,18 +90,24 @@ Input files:
   output/cleaned_traffic_dcc_2025.csv   (from 06_clean_traffic_dcc.py)
   output/cleaned_traffic_sdcc_2024.csv  (from 07_clean_traffic_sdcc.py)
   output/dublin_substations.csv         (from 08_clean_esb_substations.py)
+  output/ireland_wind_farms.csv         (from 09_clean_wind_farms.py)
   output/dublin_ev_chargers.geojson     (from 01_clean_ev_chargers.py,
                                           deduplicated version, 115 records)
   output/dublin_roads.geojson           (from 04_fetch_osm_roads.py)
 
 Output:
-  output/unified_features_v3.csv
-  - ~1039 rows (974 from DLR+DCC merge + 65 from SDCC)
+  output/unified_features_v4.csv
+  - ~1039 rows (DLR + DCC + SDCC combined, deduplicated)
   - Fields: location_id, lat, lon, traffic_volume, traffic_source,
+            distance_to_nearest_windfarm_km,
             distance_to_nearest_substation_m,
             charger_count_nearby, road_density, ev_penetration_proxy
-  - No null values
-  - Named _v3 to distinguish from v2 (without substation feature)
+  - distance_to_nearest_windfarm_km: PRIMARY renewable proxy for
+    K-Means (range ~1-18km, genuine spatial variation)
+  - distance_to_nearest_substation_m: REFERENCE ONLY — retained for
+    dashboard display but not recommended for K-Means (range 8-504m,
+    insufficient variation due to Dublin's high grid density)
+  - Named _v4 to distinguish from v3 (substation distance only)
 
 Usage:
   python 05_build_feature_dataset.py
@@ -307,13 +313,27 @@ for feat in road_data["features"]:
 print(f"Road segments loaded: {len(road_points)}")
 
 # 4. Load ESB Networks substation data
-# Used to compute distance_to_nearest_substation_m — a spatial proxy
-# for renewable energy grid access. See 08_clean_esb_substations.py
-# and docs/spatial_renewable_investigation.md for the full rationale.
+# Used to compute distance_to_nearest_substation_m — retained as a
+# reference field in the output even though it was found to have
+# insufficient spatial variation for K-Means clustering (Dublin's
+# grid density is too high — almost every site is within 100m of a
+# substation, Anqi's analysis 2026-07-07). Kept for dashboard display.
 print("Loading ESB Networks substation data...")
 substations = pd.read_csv("output/dublin_substations.csv")
 substation_points = list(zip(substations["lat"], substations["lon"]))
 print(f"Substations loaded: {len(substation_points)}")
+
+# 4b. Load SEAI wind farm data
+# Used to compute distance_to_nearest_windfarm_km — the primary
+# spatial renewable energy proxy for K-Means clustering.
+# Wind farms are sparse (313 across Ireland, ~14 within 60km of Dublin),
+# so distances range from ~1km to ~18km across Dublin traffic sites,
+# providing genuine spatial variation unlike the substation distance.
+# See 09_clean_wind_farms.py and docs/spatial_renewable_investigation.md.
+print("Loading SEAI wind farm data...")
+wind_farms = pd.read_csv("output/ireland_wind_farms.csv")
+wind_farm_points = list(zip(wind_farms["lat"], wind_farms["lon"]))
+print(f"Wind farms loaded: {len(wind_farm_points)}")
 
 # 5. Calculate features for each site
 print("\nCalculating features for each site (this may take 1-2 minutes)...")
@@ -323,6 +343,7 @@ RADIUS_M = 500  # 500 metre radius for proximity calculations
 charger_counts = []
 road_densities = []
 substation_distances = []
+windfarm_distances_km = []
 
 for idx, site in site_traffic.iterrows():
     site_lat = site["lat"]
@@ -343,13 +364,23 @@ for idx, site in site_traffic.iterrows():
     road_densities.append(nearby_roads)
 
     # Distance to nearest ESB substation (metres)
-    # With 7,780 substations across Dublin, every site will have a
-    # meaningfully different value — this is the spatial renewable proxy.
-    min_dist = min(
+    # Retained as reference field — not recommended as a K-Means feature
+    # due to Dublin's extremely high grid density (see step 4 comment).
+    min_sub = min(
         haversine(site_lat, site_lon, s_lat, s_lon)
         for s_lat, s_lon in substation_points
     )
-    substation_distances.append(round(min_dist, 1))
+    substation_distances.append(round(min_sub, 1))
+
+    # Distance to nearest wind farm (km)
+    # Primary spatial renewable proxy for K-Means. Wind farms are sparse
+    # enough (~14 within 60km of Dublin) that this feature has a range of
+    # ~1–18km across Dublin sites, providing genuine spatial variation.
+    min_wind_m = min(
+        haversine(site_lat, site_lon, w_lat, w_lon)
+        for w_lat, w_lon in wind_farm_points
+    )
+    windfarm_distances_km.append(round(min_wind_m / 1000, 3))
 
     if (idx + 1) % 50 == 0:
         print(f"  Processed {idx + 1}/{len(site_traffic)} sites...")
@@ -363,6 +394,7 @@ features_df = pd.DataFrame({
     "lon":                              site_traffic["lon"].round(6),
     "traffic_volume":                   site_traffic["traffic_volume"],
     "traffic_source":                   site_traffic["traffic_source"],
+    "distance_to_nearest_windfarm_km":  windfarm_distances_km,
     "distance_to_nearest_substation_m": substation_distances,
     "charger_count_nearby":             charger_counts,
     "road_density":                     road_densities,
@@ -380,23 +412,28 @@ print(f"By traffic_source: {features_df['traffic_source'].value_counts().to_dict
 print(f"traffic_volume  — mean: {features_df['traffic_volume'].mean():.1f}, "
       f"min: {features_df['traffic_volume'].min():.1f}, "
       f"max: {features_df['traffic_volume'].max():.1f}")
+print(f"distance_to_nearest_windfarm_km — mean: "
+      f"{features_df['distance_to_nearest_windfarm_km'].mean():.2f}km, "
+      f"min: {features_df['distance_to_nearest_windfarm_km'].min():.2f}km, "
+      f"max: {features_df['distance_to_nearest_windfarm_km'].max():.2f}km")
 print(f"distance_to_nearest_substation_m — mean: "
-      f"{features_df['distance_to_nearest_substation_m'].mean():.1f}, "
-      f"min: {features_df['distance_to_nearest_substation_m'].min():.1f}, "
-      f"max: {features_df['distance_to_nearest_substation_m'].max():.1f}")
+      f"{features_df['distance_to_nearest_substation_m'].mean():.1f}m "
+      f"(reference only, not recommended for K-Means)")
 print(f"charger_count_nearby — mean: {features_df['charger_count_nearby'].mean():.2f}, "
       f"max: {features_df['charger_count_nearby'].max()}")
 print(f"road_density    — mean: {features_df['road_density'].mean():.1f}, "
       f"max: {features_df['road_density'].max()}")
 
 # 8. Export
-output_path = "output/unified_features_v3.csv"
+output_path = "output/unified_features_v4.csv"
 features_df.to_csv(output_path, index=False)
 
 print(f"\nSaved: {output_path}")
 print(f"Final record count: {len(features_df)}")
 print("\nSample:")
 print(features_df.head(5).to_string(index=False))
-print("\nNew feature: distance_to_nearest_substation_m — spatial proxy for")
-print("renewable energy grid access (ESB Networks substations, Dec 2025).")
+print("\nKey new feature: distance_to_nearest_windfarm_km")
+print("  Recommended for K-Means (range ~1-18km across Dublin sites)")
+print("Note: distance_to_nearest_substation_m retained as reference field")
+print("  but NOT recommended for K-Means (range 8-504m, too narrow)")
 print("\nFeature dataset ready for ML teammate (K-Means clustering).")
