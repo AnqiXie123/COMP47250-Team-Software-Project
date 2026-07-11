@@ -1,0 +1,12 @@
+rank,lat,lon,cluster,gap_score,traffic_volume,charger_count_nearby,road_density,distance_to_nearest_substation_m,traffic_source,reason,k_value,candidate_percentile,minimum_spacing_m
+1,53.425378,-6.219091,5,0.7023622047244094,7731.5,0,3,138.2,DCC_2024_2025,"Recommended due to: high traffic volume, no existing chargers nearby",6,80,500
+2,53.34371,-6.308068,0,0.3968606523777104,3157.07,0,95,106.0,DCC_2024_2025,"Recommended due to: high traffic volume, no existing chargers nearby, dense road network",6,80,500
+3,53.350749,-6.254447,4,0.3168525110232656,1086.26,0,186,90.5,DCC_2024_2025,"Recommended due to: high traffic volume, no existing chargers nearby, dense road network, close to grid substation",6,80,500
+4,53.272522,-6.219414,1,0.3162978580823617,2554.25,0,73,143.3,DCC_2024_2025,"Recommended due to: high traffic volume, no existing chargers nearby, dense road network",6,80,500
+5,53.346838,-6.258914,4,0.29753230699037225,951.14,0,180,31.3,DCC_2024_2025,"Recommended due to: no existing chargers nearby, dense road network, close to grid substation",6,80,500
+6,53.352471,-6.224958,3,0.27120511294168803,2499.74,0,39,75.5,DCC_2024_2025,"Recommended due to: high traffic volume, no existing chargers nearby, close to grid substation",6,80,500
+7,53.264716,-6.133623,1,0.24943078244689762,2376.65,0,30,75.3,DCC_2024_2025,"Recommended due to: high traffic volume, no existing chargers nearby, close to grid substation",6,80,500
+8,53.403009,-6.310221,0,0.24690915118181528,2179.21,0,43,114.2,DCC_2024_2025,"Recommended due to: high traffic volume, no existing chargers nearby",6,80,500
+9,53.405293,-6.265217,3,0.23632313762952561,1944.88,0,52,182.0,DCC_2024_2025,"Recommended due to: high traffic volume, no existing chargers nearby",6,80,500
+10,53.342592,-6.271838,2,0.22825254595552197,2498.27,1,196,62.3,DCC_2024_2025,"Recommended due to: high traffic volume, low charger density, dense road network, close to grid substation",6,80,500
+11,53.34937,-6.254029,2,0.20864856367829532,1921.72,1,207,45.2,DCC_2024_2025,"Recommended due to: high traffic volume, low charger density, dense road network, close to grid substation",6,80,500
