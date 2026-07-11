@@ -273,23 +273,85 @@ Implemented — 09_clean_wind_farms.py + updated
 
 ---
 
-## Final Summary (updated 2026-07-07)
+## Candidate 6 — SEAI Solar Farm Locations ❌ NOT FEASIBLE
+
+### Rationale
+Ireland has 168 utility-scale solar farms (43 grid-connected, 125 contracted
+as of April 2026), concentrated in Meath, Cork, and Wexford. Combined with
+wind farms (313 sites), a merged "distance to nearest renewable generation
+facility" feature would cover ~480 points across Ireland — more spatially
+varied than wind farms alone, and with a stronger thematic argument (covering
+both wind and solar avoids the "Dublin doesn't necessarily use wind power"
+critique raised for Candidate 5).
+
+### Data Source Investigated
+- **Landing page:** https://www.seai.ie/renewable-energy/solar-energy/solar-map
+- **Publisher:** Sustainable Energy Authority of Ireland (SEAI)
+- **Data aggregated from:** EirGrid + ESB Networks
+
+### Critical Limitation — Data Not Accessible
+SEAI's Solar Atlas provides only **"approximate locations"** (their own
+wording) for solar farms, displayed via an interactive ArcGIS web map.
+No CSV, GeoJSON, or bulk download is available. The map URL
+(`https://maps.seai.ie/apps/solarAtlas/`) disallows automated access
+(robots.txt), and no public FeatureServer or REST API endpoint was found
+that would allow coordinate extraction.
+
+This is a direct contrast to the wind farm dataset (Candidate 5), which
+SEAI publishes as a downloadable CSV on data.gov.ie with exact Irish Grid
+coordinates. Solar farm coordinates are not published in any equivalent
+format as of July 2026.
+
+### Additional Limitation
+Even if coordinates were accessible, Ireland's solar irradiance varies by
+only ~15% nationwide (per SEAI's own Solar Atlas documentation, from
+Rosslare to Letterkenny) — meaning "distance to nearest solar farm" would
+face the same logical challenge as wind farms: proximity to a solar farm
+does not directly indicate that local EV charging uses solar-generated
+electricity, given Ireland's unified national grid (Single Electricity
+Market).
+
+### Feasibility Assessment
+❌ **Not feasible** — coordinate data is not publicly downloadable in any
+machine-readable format. This candidate is confirmed exhausted.
+
+---
+
+## Investigation Summary — All Candidates Exhausted (2026-07-08)
+
+Six candidate directions have now been systematically evaluated. No further
+publicly available spatial renewable energy data source was identified for
+the Dublin area. This reflects a known structural limitation: Ireland operates
+a unified Single Electricity Market, meaning any location's electricity supply
+draws from a national mix regardless of proximity to generation facilities.
+Finding a dataset that genuinely captures "local renewable energy potential"
+at Dublin city scale (~1 km² resolution) in a publicly accessible format has
+proven not possible with currently published Irish open data.
+
+The investigation process itself is documented here as a technical
+contribution — demonstrating systematic evaluation of available sources
+rather than arbitrary selection or omission.
+
+---
+
+## Final Summary (updated 2026-07-08)
 
 | Candidate | Spatial Resolution in Dublin | Thematic Fit | K-Means Suitability | Status |
 |---|---|---|---|---|
-| ESB Networks substations | 7,780 points (too dense) | High | Near-constant (8-504m) | Retained as reference field only |
-| Met Eireann wind stations | 2 points | Medium | Too sparse | Not implemented |
+| ESB Networks substations | 7,780 points (too dense) | High | Near-constant (8–504m) | Retained as reference field only |
+| Met Éireann wind stations | 2 points | Medium | Too sparse | Not implemented |
 | OSM land use | High (polygon) | Medium | Indirect | Not implemented |
 | CSO population density | Medium (small area) | Low | Demand proxy | Not implemented |
-| SEAI wind farms | 313 points Ireland-wide | High | 0.07-22.3km range | Implemented in v4 |
+| SEAI wind farms | 313 points Ireland-wide | High | 0.07–22.3km range | Implemented in v4 |
+| SEAI solar farms | 168 points (approx. only) | High | Not extractable | Not feasible — no downloadable coordinates |
 
 ---
 
 ## Files Referenced
-- ESB Networks heatmap Excel: raw/customer-heatmap-december-2025.xlsx
+- ESB Networks heatmap Excel: `raw/customer-heatmap-december-2025.xlsx`
   (manual download required — see landing page link above)
-- SEAI wind farms CSV: raw/WindFarmsConnectedJune2022.csv
+- SEAI wind farms CSV: `raw/WindFarmsConnectedJune2022.csv`
   (manual download required — see landing page link above)
-- Current feature dataset: output/unified_features_v4.csv
-- Pipeline scripts: 08_clean_esb_substations.py, 09_clean_wind_farms.py,
-  05_build_feature_dataset.py
+- Current feature dataset: `output/unified_features_v4.csv`
+- Pipeline scripts: `08_clean_esb_substations.py`, `09_clean_wind_farms.py`,
+  `05_build_feature_dataset.py`
