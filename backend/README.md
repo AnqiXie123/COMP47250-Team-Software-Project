@@ -170,7 +170,7 @@ curl "http://127.0.0.1:8000/api/energy/timeseries?days=7&interval=1h"
 
 ### GET `/api/recommendations`
 
-返回 K-Means 算法推荐的 10 个新 EV 充电站位置，按优先级排序（rank 1 最优先），GeoJSON FeatureCollection 格式。
+返回 K-Means 算法推荐的新 EV 充电站位置（当前 11 个），按优先级排序，GeoJSON FeatureCollection 格式。
 
 ```bash
 curl http://127.0.0.1:8000/api/recommendations
@@ -181,27 +181,89 @@ curl http://127.0.0.1:8000/api/recommendations
 | 字段 | 说明 |
 |---|---|
 | `rank` | 优先级排名（1 = 最需要建站） |
-| `cluster_id` | K-Means 聚类编号 |
-| `gap_score` | 供需缺口评分（越高越缺充电桩） |
+| `cluster` | K-Means 聚类编号 |
+| `gap_score` | 供需缺口评分（0~1，越高越缺） |
 | `traffic_volume` | 该区域平均交通流量 |
 | `charger_count_nearby` | 附近现有充电桩数量 |
-| `renewable_score` | 可再生能源评分 |
+| `road_density` | 道路密度 |
+| `distance_to_nearest_substation_m` | 距最近变电站距离（米） |
+| `traffic_source` | 交通数据来源（DCC / DLR / SDCC） |
+| `reason` | 推荐原因说明 |
+| `k_value` | K-Means 聚类 K 值 |
+| `candidate_percentile` | 候选点百分位数 |
+| `minimum_spacing_m` | 最小站点间距（米） |
 
 ```json
 {
   "type": "FeatureCollection",
-  "count": 10,
+  "count": 11,
   "features": [
     {
       "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [-6.1501, 53.2766] },
+      "geometry": { "type": "Point", "coordinates": [-6.2191, 53.4254] },
       "properties": {
         "rank": 1,
-        "cluster_id": 5,
-        "gap_score": 2120.1,
-        "traffic_volume": 2120.1,
-        "charger_count_nearby": 0.0,
-        "renewable_score": 0.4102
+        "cluster": 5,
+        "gap_score": 0.702,
+        "traffic_volume": 7731.5,
+        "charger_count_nearby": 0,
+        "road_density": 3,
+        "distance_to_nearest_substation_m": 138.2,
+        "traffic_source": "DCC_2024_2025",
+        "reason": "Recommended due to: high traffic volume, no existing chargers nearby",
+        "k_value": 6,
+        "candidate_percentile": 80,
+        "minimum_spacing_m": 500
+      }
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/scenario`
+
+根据 EV 渗透率场景返回对应推荐站点，供 Scenario Analysis 功能使用。
+
+**查询参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `ev_penetration` | `0.05` / `0.08` / `0.12` | ✅ | EV 渗透率场景 |
+
+其他值返回 `400 Bad Request`。
+
+```bash
+curl "http://127.0.0.1:8000/api/scenario?ev_penetration=0.08"
+```
+
+**返回字段：**
+
+| 字段 | 说明 |
+|------|------|
+| `rank` | 优先级排名 |
+| `cluster` | K-Means 聚类编号 |
+| `gap_score` | 该场景下的供需缺口评分 |
+| `ev_penetration` | EV 渗透率 |
+| `k_value` | K 值 |
+| `candidate_percentile` | 候选点百分位数 |
+
+```json
+{
+  "type": "FeatureCollection",
+  "count": 11,
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-6.2191, 53.4254] },
+      "properties": {
+        "rank": 1,
+        "cluster": 4,
+        "gap_score": 0.737,
+        "ev_penetration": 0.08,
+        "k_value": 6,
+        "candidate_percentile": 80
       }
     }
   ]
@@ -212,10 +274,17 @@ curl http://127.0.0.1:8000/api/recommendations
 
 ### GET `/api/traffic`
 
-返回 223 个 Dublin SCATS 交通监测站点的交通流量数据，按流量从高到低排序。
+返回 Dublin 交通监测站点的流量数据，按流量从高到低排序。支持按数据来源过滤。
+
+**查询参数：**
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `source` | `DCC` / `DLR` / `SDCC` | 无（返回全部） | 按数据来源过滤 |
 
 ```bash
 curl http://127.0.0.1:8000/api/traffic
+curl "http://127.0.0.1:8000/api/traffic?source=SDCC"
 ```
 
 **返回字段：**
@@ -225,17 +294,74 @@ curl http://127.0.0.1:8000/api/traffic
 | `lat` | 纬度 |
 | `lon` | 经度 |
 | `volume` | 年均小时交通流量（辆/小时） |
+| `source` | 数据来源（DCC / DLR / SDCC） |
 
 ```json
 [
-  { "lat": 53.344, "lon": -6.267, "volume": 1234.5 },
-  { "lat": 53.351, "lon": -6.258, "volume": 1100.2 }
+  { "lat": 53.344, "lon": -6.267, "volume": 1234.5, "source": "DCC" }
 ]
 ```
 
-**测试方式：**
-- 浏览器访问：`http://127.0.0.1:8000/api/traffic`
-- Swagger UI：`http://127.0.0.1:8000/docs` → 找到 `/api/traffic` → 点击 Try it out → Execute
+---
+
+### GET `/api/windfarms`
+
+返回 313 个爱尔兰风电场，按装机容量从高到低排序。
+
+```bash
+curl http://127.0.0.1:8000/api/windfarms
+```
+
+**返回字段：**
+
+| 字段 | 说明 |
+|---|---|
+| `name` | 风电场名称 |
+| `county` | 所在郡 |
+| `capacity_mw` | 装机容量（MW） |
+| `lat` | 纬度 |
+| `lon` | 经度 |
+
+```json
+[
+  { "name": "Derrybrien", "county": "Galway", "capacity_mw": 130.0, "lat": 53.05, "lon": -8.45 }
+]
+```
+
+---
+
+### GET `/api/substations`
+
+返回变电站数据（共 7,780 个）。支持按坐标和半径过滤，用于地图图层和推荐可解释性展示。
+
+**查询参数：**
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `lat` | float | 无 | 中心点纬度（需与 `lon` 同时提供） |
+| `lon` | float | 无 | 中心点经度 |
+| `radius` | float | `500` | 搜索半径（米），上限 10000 |
+
+不传 `lat`/`lon` 时返回全部 7,780 条（慎用）。
+
+```bash
+curl "http://127.0.0.1:8000/api/substations?lat=53.425&lon=-6.219&radius=500"
+```
+
+**返回字段：**
+
+| 字段 | 说明 |
+|---|---|
+| `name` | 变电站名称 |
+| `voltage_class` | 电压等级 |
+| `lat` | 纬度 |
+| `lon` | 经度 |
+
+```json
+[
+  { "name": "Finglas", "voltage_class": "110kV", "lat": 53.426, "lon": -6.218 }
+]
+```
 
 ---
 
@@ -243,17 +369,34 @@ curl http://127.0.0.1:8000/api/traffic
 
 ```
 backend/
-├── main.py                    # FastAPI 入口
-├── database.py                # 数据库连接（Supabase）
+├── main.py                              # FastAPI 入口
+├── database.py                          # 数据库连接（Supabase）
 ├── routers/
-│   ├── chargers.py            # GET /api/chargers
-│   ├── energy.py              # GET /api/energy/latest, GET /api/energy/timeseries
-│   ├── recommendations.py     # GET /api/recommendations
-│   └── traffic.py             # GET /api/traffic
+│   ├── chargers.py                      # GET /api/chargers
+│   ├── energy.py                        # GET /api/energy/latest, GET /api/energy/timeseries
+│   ├── recommendations.py               # GET /api/recommendations, GET /api/scenario
+│   ├── traffic.py                       # GET /api/traffic
+│   └── infrastructure.py               # GET /api/windfarms, GET /api/substations
 ├── ingest/
-│   ├── load_chargers.py       # 导入充电站数据
-│   ├── load_energy.py         # 导入能源数据
-│   ├── load_recommendations.py# 导入 K-Means 推荐结果
-│   └── load_traffic.py        # 导入 SCATS 交通流量数据
+│   ├── load_chargers.py                 # 导入充电站数据
+│   ├── load_energy.py                   # 导入能源数据
+│   ├── load_recommendations.py          # 导入 K-Means 推荐结果
+│   ├── load_scenario_recommendations.py # 导入场景分析数据（ev05/08/12）
+│   └── load_traffic.py                  # 导入 SCATS 交通流量数据
 └── tests/
 ```
+
+---
+
+## 当前 API 汇总
+
+| 接口 | 数据量 | 说明 |
+|---|---|---|
+| `GET /api/chargers` | 134 条 | Dublin EV 充电站（GeoJSON） |
+| `GET /api/energy/latest` | 1 条（最新） | EirGrid 可再生能源最新一条数据 |
+| `GET /api/energy/timeseries` | 可变（按 days/interval） | EirGrid 时序数据，供前端画折线图 |
+| `GET /api/recommendations` | 11 条 | K-Means 推荐新建充电站位置（GeoJSON） |
+| `GET /api/scenario` | 11 条（按场景） | EV 渗透率场景分析推荐（GeoJSON） |
+| `GET /api/traffic` | 最多 223 条 | SCATS 交通流量，支持 ?source= 过滤 |
+| `GET /api/windfarms` | 313 条 | 爱尔兰风电场 |
+| `GET /api/substations` | 最多 7,780 条 | 变电站，支持 ?lat=&lon=&radius= 过滤 |
