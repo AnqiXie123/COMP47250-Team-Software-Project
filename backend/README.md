@@ -274,7 +274,7 @@ curl "http://127.0.0.1:8000/api/scenario?ev_penetration=0.08"
 
 ### GET `/api/traffic`
 
-返回 Dublin 交通监测站点的流量数据，按流量从高到低排序。支持按数据来源过滤。
+返回 Dublin 交通监测站点的流量数据（DLR + DCC + SDCC 三区共 1039 个站点），按流量从高到低排序。支持按数据来源过滤。
 
 **查询参数：**
 
@@ -397,6 +397,6 @@ backend/
 | `GET /api/energy/timeseries` | 可变（按 days/interval） | EirGrid 时序数据，供前端画折线图 |
 | `GET /api/recommendations` | 11 条 | K-Means 推荐新建充电站位置（GeoJSON） |
 | `GET /api/scenario` | 11 条（按场景） | EV 渗透率场景分析推荐（GeoJSON） |
-| `GET /api/traffic` | 最多 223 条 | SCATS 交通流量，支持 ?source= 过滤 |
+| `GET /api/traffic` | 最多 1039 条 | SCATS 交通流量（DLR+DCC+SDCC），支持 ?source= 过滤 |
 | `GET /api/windfarms` | 313 条 | 爱尔兰风电场 |
 | `GET /api/substations` | 最多 7,780 条 | 变电站，支持 ?lat=&lon=&radius= 过滤 |
