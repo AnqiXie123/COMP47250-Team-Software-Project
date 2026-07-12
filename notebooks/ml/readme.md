@@ -219,3 +219,4 @@ Pre-computed recommendations for EV penetration 5%/8%/12%, aligned with Ireland'
 | SDCC data | SCOOT vs SCATS incompatibility; excluded from clustering, display only |
 | Coordinates | WGS84 decimal degrees; not projected to metric CRS (EPSG:2157) |
 | Scenario analysis | Proportional traffic scaling may not change site ranking; shows demand magnitude shift under different adoption assumptions |
+ 
