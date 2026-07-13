@@ -28,6 +28,19 @@ const getUniqueChargers = (data) => {
   return Array.from(uniqueMap.values());
 };
 
+const aggregateTrafficPoints = (data) => {
+  const map = new Map();
+  data.forEach(t => {
+    const key = `${t.lat.toFixed(5)}_${t.lon.toFixed(5)}`;
+    if (map.has(key)) {
+      if (t.volume > map.get(key).volume) map.set(key, t);
+    } else {
+      map.set(key, t);
+    }
+  });
+  return Array.from(map.values());
+};
+
 const getMarkerColor = (operator) => {
   const op = operator.toUpperCase();
   if (op.includes('ESB')) return 'blue';
@@ -49,6 +62,7 @@ const LAYERS = {
   recommendations: { id: 'recommendations', label: 'Recommended New Sites', icon: '⭐', description: 'AI-suggested locations for new charging stations', color: '#e74c3c' },
   heatmap: { id: 'heatmap', label: 'Traffic Demand Heatmap', icon: '🔥', description: 'Areas with high traffic volume need more chargers', color: '#f39c12' },
   sdcc: { id: 'sdcc', label: 'SDCC Traffic Sites', icon: '🔵', description: 'South Dublin County Council traffic monitoring sites (2024)', color: '#2563eb' },
+  windfarms: { id: 'windfarms', label: 'Wind Farms', icon: '💨', description: 'Ireland wind farm locations', color: '#059669' },
   energy: { id: 'energy', label: 'Renewable Energy Chart', icon: '🌱', description: 'Ireland wind & solar generation over the last 7 days', color: '#16a34a' },
 };
 
@@ -65,12 +79,19 @@ const TILE_LAYERS = {
   }
 };
 
-function LayerPanel({ activeLayers, onToggle, tileMode, onTileToggle, onHide }) {
+const EV_SCENARIOS = [
+  { label: 'Baseline (8%)', value: 0.08 },
+  { label: 'Low (5%)', value: 0.05 },
+  { label: 'High (12%)', value: 0.12 },
+];
+
+function LayerPanel({ activeLayers, onToggle, tileMode, onTileToggle, onHide, evScenario, onScenarioChange, scenarioActive, onResetScenario }) {
   return (
     <div style={{
       position: 'absolute', bottom: '30px', right: '10px',
       zIndex: 1000, background: 'white', borderRadius: '8px',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.2)', padding: '12px', minWidth: '260px'
+      boxShadow: '0 2px 12px rgba(0,0,0,0.2)', padding: '12px', minWidth: '260px',
+      maxHeight: '80vh', overflowY: 'auto'
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <p style={{ margin: 0, fontSize: '12px', fontWeight: 'bold', color: '#2c3e50', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Map Layers</p>
@@ -105,6 +126,34 @@ function LayerPanel({ activeLayers, onToggle, tileMode, onTileToggle, onHide }) 
           </div>
         </div>
       ))}
+
+      <hr style={{ border: '0', borderTop: '1px solid #eee', margin: '10px 0' }} />
+
+      <p style={{ margin: '0 0 6px 0', fontSize: '11px', fontWeight: 'bold', color: '#7f8c8d', textTransform: 'uppercase' }}>EV Scenario Analysis</p>
+      <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#7f8c8d' }}>Select EV adoption rate to update recommended sites</p>
+      {EV_SCENARIOS.map(s => (
+        <div key={s.value}
+          onClick={() => onScenarioChange(s.value)}
+          style={{
+            padding: '6px 8px', borderRadius: '6px', cursor: 'pointer', marginBottom: '4px',
+            background: scenarioActive && evScenario === s.value ? '#fef3c7' : '#f8f9fa',
+            border: `2px solid ${scenarioActive && evScenario === s.value ? '#f59e0b' : 'transparent'}`,
+            fontSize: '12px', color: '#2c3e50', fontWeight: scenarioActive && evScenario === s.value ? '600' : '400'
+          }}>
+          {s.label}
+        </div>
+      ))}
+      {scenarioActive && (
+        <div
+          onClick={onResetScenario}
+          style={{
+            padding: '6px 8px', borderRadius: '6px', cursor: 'pointer', marginTop: '4px',
+            background: '#fee2e2', border: '2px solid #e74c3c',
+            fontSize: '12px', color: '#e74c3c', fontWeight: '600', textAlign: 'center'
+          }}>
+          ✕ Reset to Default
+        </div>
+      )}
 
       <hr style={{ border: '0', borderTop: '1px solid #eee', margin: '10px 0' }} />
 
@@ -145,14 +194,19 @@ function App() {
   const [showGuide, setShowGuide] = useState(false);
   const [chargers, setChargers] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
+  const [scenarioRecs, setScenarioRecs] = useState([]);
   const [trafficData, setTrafficData] = useState([]);
   const [sdccData, setSdccData] = useState([]);
+  const [windFarms, setWindFarms] = useState([]);
   const [energyData, setEnergyData] = useState([]);
+  const [evScenario, setEvScenario] = useState(null);
+  const [scenarioLoading, setScenarioLoading] = useState(false);
   const [activeLayers, setActiveLayers] = useState({
     chargers: true,
     recommendations: true,
     heatmap: false,
     sdcc: false,
+    windfarms: false,
     energy: false,
   });
   const [tileMode, setTileMode] = useState('standard');
@@ -188,6 +242,8 @@ function App() {
           charger_count_nearby: f.properties.charger_count_nearby,
           road_density: f.properties.road_density,
           traffic_source: f.properties.traffic_source,
+          reason: f.properties.reason,
+          distance_to_nearest_substation_m: f.properties.distance_to_nearest_substation_m,
         }));
         setRecommendations(points);
       })
@@ -203,20 +259,56 @@ function App() {
       .then(data => setSdccData(data))
       .catch(err => console.error('SDCC fetch failed:', err));
 
+    fetch('http://127.0.0.1:8000/api/windfarms')
+      .then(res => res.json())
+      .then(data => setWindFarms(data))
+      .catch(err => console.error('Windfarms fetch failed:', err));
+
     fetch('http://127.0.0.1:8000/api/energy/timeseries?days=7&interval=1h')
       .then(res => res.json())
       .then(data => setEnergyData(data))
       .catch(err => console.error('Energy fetch failed:', err));
   }, []);
 
+  const handleScenarioChange = (value) => {
+    setEvScenario(value);
+    setScenarioLoading(true);
+    fetch(`http://127.0.0.1:8000/api/scenario?ev_penetration=${value}`)
+      .then(res => res.json())
+      .then(data => {
+        const points = data.features.map(f => ({
+          id: `scenario_${f.properties.rank}`,
+          lat: f.geometry.coordinates[1],
+          lon: f.geometry.coordinates[0],
+          rank: f.properties.rank,
+          gap_score: f.properties.gap_score,
+          ev_penetration: f.properties.ev_penetration,
+        }));
+        setScenarioRecs(points);
+        setScenarioLoading(false);
+      })
+      .catch(err => {
+        console.error('Scenario fetch failed:', err);
+        setScenarioLoading(false);
+      });
+  };
+
+  const handleResetScenario = () => {
+    setScenarioRecs([]);
+    setEvScenario(null);
+  };
+
   const toggleLayer = (layerId) => {
     setActiveLayers(prev => ({ ...prev, [layerId]: !prev[layerId] }));
   };
 
   const CLEANED_CHARGERS = getUniqueChargers(chargers);
-  const heatmapPoints = trafficData.map(t => ({
+  const heatmapPoints = aggregateTrafficPoints(trafficData).map(t => ({
     lat: t.lat, lon: t.lon, intensity: t.volume / 3000
   }));
+  const aggregatedSdcc = aggregateTrafficPoints(sdccData);
+  const displayedRecs = scenarioRecs.length > 0 ? scenarioRecs : recommendations;
+  const scenarioActive = scenarioRecs.length > 0;
 
   if (!loggedIn) {
     return <LoginPage onEnter={() => { setLoggedIn(true); setShowGuide(true); }} />;
@@ -270,19 +362,28 @@ function App() {
             </div>
             <div>
               <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#95a5a6', textTransform: 'uppercase' }}>Recommended New Sites</p>
-              <p style={{ margin: 0, fontSize: '28px', fontWeight: 'bold', color: '#e74c3c' }}>{recommendations.length}</p>
+              <p style={{ margin: 0, fontSize: '28px', fontWeight: 'bold', color: '#e74c3c' }}>{displayedRecs.length}</p>
             </div>
             <div>
               <p style={{ margin: '0 0 4px 0', fontSize: '11px', color: '#95a5a6', textTransform: 'uppercase' }}>Traffic Monitoring Sites</p>
               <p style={{ margin: 0, fontSize: '28px', fontWeight: 'bold', color: '#3498db' }}>{trafficData.length}</p>
             </div>
+            {scenarioActive && (
+              <div style={{ padding: '8px', background: '#f59e0b20', borderRadius: '4px', border: '1px solid #f59e0b' }}>
+                <p style={{ margin: 0, fontSize: '11px', color: '#f59e0b', fontWeight: 'bold' }}>
+                  📊 Scenario: EV {(evScenario * 100).toFixed(0)}%
+                </p>
+              </div>
+            )}
             <hr style={{ border: '0', borderTop: '1px solid #2c3e50', margin: '4px 0' }} />
             <div>
               <p style={{ margin: '0 0 8px 0', fontSize: '11px', color: '#95a5a6', textTransform: 'uppercase' }}>Top Priority New Sites</p>
-              {recommendations.slice(0, 5).map(r => (
+              {displayedRecs.slice(0, 5).map(r => (
                 <div key={r.id} style={{ marginBottom: '10px', padding: '8px', background: '#2c3e50', borderRadius: '4px' }}>
-                  <p style={{ margin: '0 0 2px 0', fontSize: '12px', color: '#e74c3c', fontWeight: 'bold' }}>⭐ Rank #{r.rank}</p>
-                  <p style={{ margin: 0, fontSize: '11px', color: '#bdc3c7' }}>Demand Gap: {r.gap_score.toFixed(0)}</p>
+                  <p style={{ margin: '0 0 2px 0', fontSize: '12px', color: scenarioActive ? '#f59e0b' : '#e74c3c', fontWeight: 'bold' }}>
+                    {scenarioActive ? '📊' : '⭐'} Rank #{r.rank}
+                  </p>
+                  <p style={{ margin: 0, fontSize: '11px', color: '#bdc3c7' }}>Gap Score: {r.gap_score.toFixed(2)}</p>
                 </div>
               ))}
             </div>
@@ -291,6 +392,15 @@ function App() {
 
         {/* Map */}
         <div style={{ flex: 1, position: 'relative' }}>
+          {scenarioLoading && (
+            <div style={{
+              position: 'absolute', top: '10px', left: '50%', transform: 'translateX(-50%)',
+              zIndex: 2000, background: '#1a252f', color: '#fff', padding: '6px 14px',
+              borderRadius: '20px', fontSize: '12px'
+            }}>
+              ⏳ Loading scenario...
+            </div>
+          )}
           <MapContainer center={[53.3498, -6.2603]} zoom={11} style={{ height: '100%', width: '100%' }}>
             <TileLayer
               url={TILE_LAYERS[tileMode].url}
@@ -321,35 +431,55 @@ function App() {
               </Marker>
             ))}
 
-            {activeLayers.recommendations && recommendations.map(r => (
+            {activeLayers.recommendations && displayedRecs.map(r => (
               <Marker
                 key={r.id}
                 position={[r.lat, r.lon]}
                 icon={L.divIcon({
                   className: '',
-                  html: `<div style="background:#e74c3c;color:white;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4)">${r.rank}</div>`,
+                  html: `<div style="background:${scenarioActive ? '#f59e0b' : '#e74c3c'};color:white;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4)">${r.rank}</div>`,
                   iconSize: [30, 30],
                   iconAnchor: [15, 15]
                 })}
               >
                 <Popup>
                   <div style={{ fontFamily: 'Segoe UI, Arial, sans-serif', minWidth: '220px' }}>
-                    <h4 style={{ margin: '0 0 8px 0', color: '#e74c3c', fontSize: '14px' }}>⭐ Recommended New Charging Site</h4>
-                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Priority Rank:</b> #{r.rank} out of 10</p>
-                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Demand Gap Score:</b> {r.gap_score.toFixed(0)}</p>
-                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Traffic Volume:</b> {r.traffic_volume.toFixed(0)}</p>
-                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Nearby Chargers:</b> {r.charger_count_nearby.toFixed(0)}</p>
-                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Road Density:</b> {r.road_density}</p>
-                    <p style={{ margin: '4px 0', fontSize: '11px', color: '#7f8c8d' }}><b>Data Source:</b> {r.traffic_source}</p>
-                    <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#7f8c8d', lineHeight: '1.4' }}>
-                      This location has high traffic volume but insufficient charging infrastructure nearby.
-                    </p>
+                    <h4 style={{ margin: '0 0 8px 0', color: scenarioActive ? '#f59e0b' : '#e74c3c', fontSize: '14px' }}>
+                      {scenarioActive ? '📊' : '⭐'} Recommended New Charging Site
+                    </h4>
+                    {scenarioActive && (
+                      <p style={{ margin: '4px 0', fontSize: '11px', color: '#f59e0b', fontWeight: 'bold' }}>
+                        Scenario: EV Penetration {(r.ev_penetration * 100).toFixed(0)}%
+                      </p>
+                    )}
+                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Priority Rank:</b> #{r.rank}</p>
+                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Gap Score:</b> {r.gap_score.toFixed(3)}</p>
+                    {r.traffic_volume !== undefined && (
+                      <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Traffic Volume:</b> {r.traffic_volume.toFixed(0)}</p>
+                    )}
+                    {r.charger_count_nearby !== undefined && (
+                      <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Nearby Chargers:</b> {r.charger_count_nearby.toFixed(0)}</p>
+                    )}
+                    {r.road_density !== undefined && (
+                      <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Road Density:</b> {r.road_density}</p>
+                    )}
+                    {r.distance_to_nearest_substation_m !== undefined && (
+                      <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Distance to Substation:</b> {r.distance_to_nearest_substation_m}m</p>
+                    )}
+                    {r.traffic_source && (
+                      <p style={{ margin: '4px 0', fontSize: '11px', color: '#7f8c8d' }}><b>Data Source:</b> {r.traffic_source}</p>
+                    )}
+                    {r.reason && (
+                      <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#059669', lineHeight: '1.4', fontStyle: 'italic' }}>
+                        {r.reason}
+                      </p>
+                    )}
                   </div>
                 </Popup>
               </Marker>
             ))}
 
-            {activeLayers.sdcc && sdccData.map((s, i) => (
+            {activeLayers.sdcc && aggregatedSdcc.map((s, i) => (
               <Marker
                 key={`sdcc_${i}`}
                 position={[s.lat, s.lon]}
@@ -370,6 +500,29 @@ function App() {
               </Marker>
             ))}
 
+            {activeLayers.windfarms && windFarms.map((w, i) => (
+              <Marker
+                key={`wf_${i}`}
+                position={[w.lat, w.lon]}
+                icon={L.divIcon({
+                  className: '',
+                  html: `<div style="width:14px;height:14px;border-radius:50%;background:#059669;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:8px;">💨</div>`,
+                  iconSize: [14, 14],
+                  iconAnchor: [7, 7]
+                })}
+              >
+                <Popup>
+                  <div style={{ fontFamily: 'Segoe UI, Arial, sans-serif', minWidth: '180px' }}>
+                    <h4 style={{ margin: '0 0 6px 0', color: '#059669', fontSize: '13px' }}>💨 {w.name}</h4>
+                    <p style={{ margin: '4px 0', fontSize: '12px' }}><b>County:</b> {w.county}</p>
+                    {w.capacity_mw && (
+                      <p style={{ margin: '4px 0', fontSize: '12px' }}><b>Capacity:</b> {w.capacity_mw} MW</p>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+
             {activeLayers.heatmap && <HeatmapLayer points={heatmapPoints} />}
 
           </MapContainer>
@@ -381,6 +534,10 @@ function App() {
               tileMode={tileMode}
               onTileToggle={setTileMode}
               onHide={() => setShowLayerPanel(false)}
+              evScenario={evScenario}
+              onScenarioChange={handleScenarioChange}
+              scenarioActive={scenarioActive}
+              onResetScenario={handleResetScenario}
             />
           )}
         </div>
