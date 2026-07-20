@@ -15,6 +15,7 @@ async def get_recommendations(db: AsyncSession = Depends(get_db)):
     result = await db.execute(text(
         "SELECT rank, lat, lon, cluster, gap_score, traffic_volume, "
         "charger_count_nearby, road_density, distance_to_nearest_substation_m, "
+        "distance_to_nearest_windfarm_km, "
         "traffic_source, reason, k_value, candidate_percentile, minimum_spacing_m "
         "FROM recommendations "
         "ORDER BY rank ASC"
@@ -41,7 +42,8 @@ async def get_scenario(
         raise HTTPException(status_code=400, detail="ev_penetration must be one of: 0.05, 0.08, 0.12")
 
     result = await db.execute(
-        text("SELECT rank, lat, lon, cluster, gap_score, ev_penetration, k_value, candidate_percentile "
+        text("SELECT rank, lat, lon, cluster, gap_score, ev_penetration, k_value, "
+             "candidate_percentile, distance_to_nearest_windfarm_km "
              "FROM scenario_recommendations WHERE ev_penetration = :ev "
              "ORDER BY rank ASC"),
         {"ev": ev_penetration}
