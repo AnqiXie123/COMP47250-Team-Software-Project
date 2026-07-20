@@ -35,7 +35,8 @@ for csv_path, ev_val in SCENARIO_FILES:
     df = pd.read_csv(Path(csv_path))
     execute_values(cur, """
         INSERT INTO scenario_recommendations
-            (rank, lat, lon, cluster, gap_score, ev_penetration, k_value, candidate_percentile)
+            (rank, lat, lon, cluster, gap_score, ev_penetration, k_value,
+             candidate_percentile, distance_to_nearest_windfarm_km)
         VALUES %s
     """, [
         (
@@ -47,6 +48,7 @@ for csv_path, ev_val in SCENARIO_FILES:
             ev_val,
             int(row["k_value"]),
             int(row["candidate_percentile"]),
+            float(row["distance_to_nearest_windfarm_km"]),
         )
         for _, row in df.iterrows()
     ])

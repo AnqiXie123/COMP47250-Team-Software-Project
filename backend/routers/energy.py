@@ -18,6 +18,21 @@ async def get_latest_energy(db: AsyncSession = Depends(get_db)):
     return dict(row)
 
 
+@router.get("/api/energy/summary")
+async def get_energy_summary(db: AsyncSession = Depends(get_db)):
+    """Return historical average renewable energy statistics for the full dataset period."""
+    result = await db.execute(text(
+        "SELECT "
+        "ROUND(AVG(renewable_score)::numeric, 4) AS avg_renewable_share, "
+        "ROUND(AVG(wind_mw)::numeric, 1) AS avg_wind_generation, "
+        "ROUND(AVG(solar_mw)::numeric, 1) AS avg_solar_generation, "
+        "TO_CHAR(MIN(datetime), 'YYYY') AS data_period "
+        "FROM renewable_energy"
+    ))
+    row = result.mappings().first()
+    return dict(row)
+
+
 def _validate_timeseries_params(days_raw: str, interval: str):
     if interval not in {"15m", "1h", "1d"}:
         raise HTTPException(status_code=400, detail="interval must be one of: 15m, 1h, 1d")
